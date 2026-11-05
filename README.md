@@ -72,4 +72,60 @@ For maximum safety, run a scheduled `pg_dump` to an external bucket (R2/B2/S3) a
 The dashboard sends requests without an `x-admin-id` header by default. To enable per-admin attribution and audit, add this to the `api()` function in `public/dashboard.html`:
 
 ```js
-async function api(path, opts = {})
+async function api(path, opts = {}) {
+  const adminId = localStorage.getItem('toonpay_admin_id')
+    || prompt('Your Telegram ID:') || '0';
+  localStorage.setItem('toonpay_admin_id', adminId);
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', 'x-admin-id': adminId },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+```
+
+## Bot commands (work in admin group or in DM as admin)
+
+| Command | Description |
+|---|---|
+| `/start` | Welcome / create ticket (users) |
+| `/reply <ticket#> <text>` | Reply to a ticket |
+| `/note <ticket#> <text>` | Save an internal note |
+| `/ticket <ticket#>` | Show ticket card |
+| `/stats` | Show ticket counters |
+| `/broadcast` | Start interactive broadcast flow |
+| `/skip` | Skip inline buttons step during broadcast |
+| `/cancel` | Abort any active reply/broadcast |
+
+## Broadcast flow via bot
+
+1. Send `/broadcast`
+2. Send text OR photo/video/GIF/document (caption = text)
+3. Send inline buttons as lines: `Label | https://url` or send `/skip`
+4. Choose audience: All Users / Specific Users / All Groups / Specific Groups
+5. If specific → send comma-separated IDs
+
+The engine handles:
+- Multiple photos → `sendMediaGroup` + follow-up message with buttons
+- Video / GIF → `sendVideo` / `sendAnimation` with inline keyboard
+- Rate limiting (~20/sec) with progress tracking in `broadcast_jobs`
+- Automatic `blocked=true` marking for users who blocked the bot (error 403)
+
+## Data persistence
+
+- **Database**: PostgreSQL on a Railway volume — survives restart/redeploy
+- **Uploaded files**: forwarded through Telegram, referenced by `file_id` — nothing stored on disk
+- **Audit log**: append-only `ticket_events` table records every action
+- **Backups**: volume snapshots + PITR + offsite `pg_dump`
+
+## File map
+
+```
+public/dashboard.html   Admin UI (single file, no build)
+src/server.js           Express + webhook entry point
+src/db.js               Postgres pool + schema + seeding
+src/bot.js              Telegraf handlers, ticket routing, interactive broadcast
+src/api.js              REST API consumed by the dashboard
+src/broadcast.js        Broadcast job engine (media groups, rate limit)
+```
