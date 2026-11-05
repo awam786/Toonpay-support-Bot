@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToonPay Support · Admin Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #181b24; --surface2: #1f2330; --border: #2a2f3d;
+    --text: #e6e9f0; --muted: #8b93a7; --accent: #4f8cff; --green: #2ecc71;
+    --yellow: #f1c40f; --red: #e74c3c; --purple: #9b59b6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); display: flex; min-height: 100vh; }
+  /* Sidebar */
+  .sidebar { width: 230px; background: var(--surface); border-right: 1px solid var(--border);
+    padding: 20px 0; flex-shrink: 0; }
+  .logo { padding: 0 20px 20px; font-size: 18px; font-weight: 700; border-bottom: 1px solid var(--border); }
+  .logo span { color: var(--accent); }
+  .nav-item { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px;
+    border-left: 3px solid transparent; transition: all .15s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent);
+    background: rgba(79,140,255,.08); font-weight: 600; }
+  /* Main */
+  .main { flex: 1; padding: 24px 32px; overflow-y: auto; }
+  .view { display: none; } .view.active { display: block; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h1 { font-size: 22px; font-weight: 700; }
+  .badge { background: var(--accent); color: #fff; padding: 3px 9px; border-radius: 20px; font-size: 12px; }
+  /* Cards */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+    gap: 14px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; }
+  .stat-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .stat-card .value { font-size: 26px; font-weight: 700; margin-top: 6px; }
+  .stat-card .value.green { color: var(--green); } .stat-card .value.yellow { color: var(--yellow); }
+  .stat-card .value.red { color: var(--red); } .stat-card .value.purple { color: var(--purple); }
+  /* Table */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; margin-bottom: 20px; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; padding: 10px 14px; color: var(--muted); font-weight: 500;
+    font-size: 12px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .tag.open { background: rgba(79,140,255,.15); color: var(--accent); }
+  .tag.inprogress { background: rgba(241,196,15,.15); color: var(--yellow); }
+  .tag.resolved { background: rgba(46,204,113,.15); color: var(--green); }
+  .tag.closed { background: rgba(139,147,167,.15); color: var(--muted); }
+  .tag.high { background: rgba(231,76,60,.15); color: var(--red); }
+  /* Buttons */
+  .btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px;
+    transition: all .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn-primary:hover { opacity: .9; }
+  .btn-green { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-red { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  /* Forms */
+  input, textarea, select { background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 9px 12px; border-radius: 6px; font-size: 13.5px;
+    width: 100%; font-family: inherit; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .row { display: flex; gap: 12px; } .row > * { flex: 1; }
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65);
+    display: none; align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; width: 560px; max-width: 92vw; max-height: 85vh; overflow-y: auto; }
+  .modal h3 { margin-bottom: 18px; font-size: 17px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  /* Ticket thread */
+  .thread { max-height: 360px; overflow-y: auto; padding: 14px; background: var(--bg);
+    border-radius: 8px; margin-bottom: 14px; }
+  .msg { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px;
+    max-width: 85%; line-height: 1.45; }
+  .msg.user { background: var(--surface2); border-left: 3px solid var(--accent); }
+  .msg.admin { background: rgba(46,204,113,.08); border-left: 3px solid var(--green);
+    margin-left: auto; }
+  .msg.note { background: rgba(241,196,15,.08); border-left: 3px solid var(--yellow); }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; }
+  .tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--border); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .empty { padding: 32px; text-align: center; color: var(--muted); font-size: 14px; }
+  .search-bar { display: flex; gap: 10px; margin-bottom: 18px; }
+  .search-bar input { flex: 1; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px;
+    background: var(--surface2); border: 1px solid var(--border); margin-right: 6px; margin-bottom: 4px; }
+  .inline-btn-builder { border: 1px dashed var(--border); border-radius: 8px; padding: 12px; margin-top: 8px; }
+  .inline-btn-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .inline-btn-row input { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="logo">ToonPay <span>Support</span></div>
+  <div class="nav-item active" data-view="overview">📊 Overview</div>
+  <div class="nav-item" data-view="tickets">🎫 Tickets</div>
+  <div class="nav-item" data-view="ticket-detail">🔍 Ticket Detail</div>
+  <div class="nav-item" data-view="broadcast">📢 Broadcast</div>
+  <div class="nav-item" data-view="admins">👥 Admin Performance</div>
+  <div class="nav-item" data-view="audit">📜 Audit Log</div>
+  <div class="nav-item" data-view="settings">⚙️ Settings</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- OVERVIEW -->
+  <div class="view active" id="view-overview">
+    <div class="header"><h1>Overview</h1><span class="badge" id="live-badge">Live</span></div>
+    <div class="stats-grid" id="overview-stats"></div>
+    <div class="card">
+      <div class="card-header"><span>Recent Tickets</span>
+        <button class="btn btn-sm" onclick="loadOverview()">↻ Refresh</button></div>
+      <table><thead><tr><th>#</th><th>User</th><th>Category</th><th>Status</th><th>Priority</th><th>Created</th><th></th></tr></thead>
+      <tbody id="recent-tickets"></tbody></table>
+    </div>
+  </div>
+
+  <!-- TICKETS -->
+  <div class="view" id="view-tickets">
+    <div class="header"><h1>Tickets</h1></div>
+    <div class="tabs" id="ticket-tabs">
+      <div class="tab active" data-filter="all">All</div>
+      <div class="tab" data-filter="open">Open</div>
+      <div class="tab" data-filter="in_progress">In Progress</div>
+      <div class="tab" data-filter="pending">Pending</div>
+      <div class="tab" data-filter="resolved">Resolved</div>
+      <div class="tab" data-filter="closed">Closed</div>
+    </div>
+    <div class="search-bar">
+      <input id="ticket-search" placeholder="Search by ticket #, user, transaction ID, wallet…" oninput="filterTickets()">
+      <button class="btn btn-primary" onclick="loadTickets()">Search</button>
+    </div>
+    <div class="card">
+      <table><thead><tr><th>#</th><th>User</th><th>Category</th><th>Subject</th><th>Status</th><th>Priority</th><th>Assigned</th><th>Created</th><th></th></tr></thead>
+      <tbody id="ticket-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- TICKET DETAIL -->
+  <div class="view" id="view-ticket-detail">
+    <div class="header"><h1 id="detail-title">Ticket Detail</h1>
+      <button class="btn btn-sm" onclick="showView('tickets')">← Back to list</button></div>
+    <div class="row">
+      <div class="card" style="flex:2">
+        <div class="card-header">Conversation</div>
+        <div class="thread" id="detail-thread"><div class="empty">Select a ticket.</div></div>
+        <div style="padding:14px;border-top:1px solid var(--border)">
+          <div class="form-group"><label>Reply to user</label>
+            <textarea id="reply-text" placeholder="Type your reply. It will NOT be sent until you click Send Reply."></textarea></div>
+          <div class="row">
+            <button class="btn btn-primary" onclick="sendReply()">📤 Send Reply to User</button>
+            <button class="btn" onclick="sendInternalNote()">📝 Internal Note (user won't see)</button>
+            <button class="btn btn-green" onclick="resolveTicket()">✅ Resolve</button>
+            <button class="btn btn-red" onclick="closeTicket()">🔒 Close</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:8px">
+            Typing a plain message in the admin group does <b>not</b> send it to the user.
+            You must use the Reply button here or the <code>/reply</code> command with the ticket number.</p>
+        </div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="card-header">Details</div>
+        <div style="padding:16px;font-size:13.5px" id="detail-meta"></div>
+        <div class="card-header">Admin Actions</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:8px">
+          <button class="btn" onclick="claimTicket()">🙋 Claim Ticket</button>
+          <button class="btn" onclick="changePriority()">⚡ Change Priority</button>
+          <button class="btn" onclick="escalateTicket()">🚨 Escalate</button>
+          <button class="btn" onclick="toggleNoteView()">👁 Toggle Internal Notes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BROADCAST -->
+  <div class="view" id="view-broadcast">
+    <div class="header"><h1>Broadcast</h1></div>
+    <div class="card">
+      <div class="card-header">Compose Broadcast</div>
+      <div style="padding:18px">
+        <div class="form-group"><label>Message text / caption</label>
+          <textarea id="bc-text" placeholder="Write the broadcast text. HTML formatting is supported."></textarea></div>
+        <div class="form-group"><label>Media (optional — you can send multiple photos, a video, or a GIF)</label>
+          <input id="bc-media" placeholder="Paste Telegram file_id or upload URL, comma-separated for albums">
+          <p style="font-size:12px;color:var(--muted);margin-top:4px">
+            The bot will use <code>sendMediaGroup</code> for multiple photos and <code>copyMessage</code>
+            for media forwarded from the admin chat.</p></div>
+        <div class="form-group">
+          <label><input type="checkbox" id="bc-attach-media" style="width:auto;margin-right:6px">
+            Attach media from a message you will forward to the bot after starting the broadcast</label>
+        </div>
+        <div class="form-group"><label>Inline buttons (optional)</label>
+          <div class="inline-btn-builder" id="inline-btn-builder">
+            <div class="inline-btn-row"><input placeholder="Button label" class="ib-label">
+              <input placeholder="URL (https://…)" class="ib-url">
+              <button class="btn btn-sm btn-red" onclick="this.parentElement.remove()">✕</button></div>
+          </div>
+          <button class="btn btn-sm" style="margin-top:8px" onclick="addInlineButtonRow()">+ Add button</button>
+          <p style="font-size:12px;color:var(--muted);margin-top:6px">
+            Leave empty to send without buttons. Each row becomes one line in the inline keyboard.</p>
+        </div>
+        <div class="form-group"><label>Audience</label>
+          <select id="bc-target">
+            <option value="all_users">Broadcast to all users</option>
+            <option value="specific_users">Broadcast to specific users (provide IDs)</option>
+            <option value="all_groups">Broadcast to all groups</option>
+            <option value="specific_groups">Broadcast to specific groups (provide IDs)</option>
+          </select></div>
+        <div class="form-group" id="bc-ids-group" style="display:none">
+          <label>Target IDs (comma-separated)</label>
+          <input id="bc-ids" placeholder="123456789, -100987654321"></div>
+        <div class="row">
+          <button class="btn btn-primary" onclick="sendBroadcast()">🚀 Send Broadcast</button>
+          <button class="btn" onclick="previewBroadcast()">👁 Preview</button>
+          <button class="btn" onclick="resetBroadcast()">↺ Reset</button>
+        </div>
+        <div id="bc-status" style="margin-top:14px;font-size:13px;color:var(--muted)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN PERFORMANCE -->
+  <div class="view" id="view-admins">
+    <div class="header"><h1>Admin Performance</h1></div>
+    <div class="stats-grid" id="admin-stats"></div>
+    <div class="card">
+      <div class="card-header">Per-Admin Breakdown</div>
+      <table><thead><tr><th>Admin</th><th>Claimed</th><th>Solved</th><th>In Progress</th>
+        <th>Avg First Response</th><th>Avg Resolution</th><th>SLA %</th><th>CSAT</th></tr></thead>
+      <tbody id="admin-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- AUDIT LOG -->
+  <div class="view" id="view-audit">
+    <div class="header"><h1>Audit Log</h1></div>
+    <div class="search-bar">
+      <input id="audit-search" placeholder="Filter by ticket #, admin, action…" oninput="loadAudit()">
+      <button class="btn btn-primary" onclick="loadAudit()">Filter</button>
+    </div>
+    <div class="card">
+      <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Ticket</th><th>Details</th></tr></thead>
+      <tbody id="audit-table"></tbody></table>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="view" id="view-settings">
+    <div class="header"><h1>Settings</h1></div>
+    <div class="card"><div class="card-header">Admin Group & Routing</div>
+      <div style="padding:18px" class="row">
+        <div class="form-group"><label>Admin group chat ID</label>
+          <input id="set-group-id" placeholder="-100…"></div>
+        <div class="form-group"><label>Default queue topic ID</label>
+          <input id="set-topic-id" placeholder="Optional"></div>
+      </div>
+      <div style="padding:0 18px 18px"><button class="btn btn-primary" onclick="saveSettings()">Save</button></div>
+    </div>
+    <div class="card"><div class="card-header">SLA Policies</div>
+      <div style="padding:18px;font-size:13.5px;color:var(--muted)">
+        Configure first-response and resolution targets per category from the backend.
+        The dashboard reads these values live.</div></div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+/* ============================================================
+   TOONPAY DASHBOARD — CLIENT LOGIC
+   All data comes from the backend API at /api/*.
+   The bot service serves both this file and the API.
+   ============================================================ */
+
+const API = '/api';
+let currentTicketId = null;
+let currentFilter = 'all';
+let allTickets = [];
+
+/* ---------- NAVIGATION ---------- */
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => showView(el.dataset.view));
+});
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const view = document.getElementById('view-' + name);
+  if (view) view.classList.add('active');
+  const nav = document.querySelector(`.nav-item[data-view="${name}"]`);
+  if (nav) nav.classList.add('active');
+  if (name === 'overview') loadOverview();
+  if (name === 'tickets') loadTickets();
+  if (name === 'admins') loadAdminStats();
+  if (name === 'audit') loadAudit();
+}
+
+/* ---------- HELPERS ---------- */
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, { month:'short', day:'numeric',
+    hour:'2-digit', minute:'2-digit' });
+}
+function statusTag(s) {
+  const map = { open:'open', in_progress:'inprogress', resolved:'resolved',
+    closed:'closed', pending:'open', new:'open' };
+  return `<span class="tag ${map[s]||'open'}">${s.replace('_',' ')}</span>`;
+}
+function priorityTag(p) {
+  return p === 'high' || p === 'urgent'
+    ? `<span class="tag high">${p}</span>` : `<span class="pill">${p||'normal'}</span>`;
+}
+
+/* ---------- OVERVIEW ---------- */
+async function loadOverview() {
+  try {
+    const stats = await api('/stats/overview');
+    document.getElementById('overview-stats').innerHTML = `
+      <div class="stat-card"><div class="label">Total Tickets</div><div class="value">${stats.total||0}</div></div>
+      <div class="stat-card"><div class="label">Open</div><div class="value yellow">${stats.open||0}</div></div>
+      <div class="stat-card"><div class="label">In Progress</div><div class="value purple">${stats.in_progress||0}</div></div>
+      <div class="stat-card"><div class="label">Resolved</div><div class="value green">${stats.resolved||0}</div></div>
+      <div class="stat-card"><div class="label">Overdue SLA</div><div class="value red">${stats.overdue||0}</div></div>`;
+    const recent = await api('/tickets?limit=8');
+    document.getElementById('recent-tickets').innerHTML = (recent.tickets||[]).map(t => `
+      <tr><td>#${t.ticket_number}</td><td>${t.user_name||t.user_id}</td>
+        <td>${t.category||'—'}</td><td>${statusTag(t.status)}</td>
+        <td>${priorityTag(t.priority)}</td><td>${fmtDate(t.created_at)}</td>
+        <td><button class="btn btn-sm" onclick="openTicket(${t.id})">Open</button></td></tr>`).join('')
+      || '<tr><td colspan="7" class="empty">No tickets yet.</td></tr>';
+  } catch(e) { console.error(e); }
+}
+
+/* ---------- TICKETS ---------- */
+async function loadTickets() {
+  try {
+    const q = document.getElementById('ticket-search').value.trim();
+    const data = await api(`/tickets?status=${currentFilter}&q=${encodeURIComponent(q)}`);
+    allTickets = data.tickets || [];
+    renderTicketTable();
+  } catch(e) { console.error(e); }
+}
+function renderTicketTable() {
+  const rows = allTickets.map(t => `
+    <tr><td>#${t.ticket_number}</td><td>${t.user_name||t.user_id}</td>
+      <td>${t.category||'—'}</td><td>${t.subject||'—'}</td>
+      <td>${statusTag(t.status)}</td><td>${priorityTag(t.priority)}</td>
+      <td>${t.assigned_admin_name||'—'}</td><td>${fmtDate(t.created_at)}</td>
+      <td><button class="btn btn-sm" onclick="openTicket(${t.id})">Open</button></td></tr>`).join('');
+  document.getElementById('ticket-table').innerHTML = rows
+    || '<tr><td colspan="9" class="empty">No tickets match the filter.</td></tr>';
+}
+function filterTickets() { loadTickets(); }
+document.querySelectorAll('#ticket-tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('#ticket-tabs .tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentFilter = tab.dataset.filter;
+    loadTickets();
+  });
+});
+
+/* ---------- TICKET DETAIL ---------- */
+async function openTicket(id) {
+  currentTicketId = id;
+  showView('ticket-detail');
+  document.getElementById('detail-title').textContent = 'Ticket Detail';
+  document.getElementById('detail-thread').innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const t = await api('/tickets/' + id);
+    document.getElementById('detail-title').textContent =
+      `#${t.ticket_number} · ${t.subject || t.category || 'Ticket'}`;
+    const thread = (t.messages||[]).map(m => `
+      <div class="msg ${m.direction === 'internal' ? 'note' : m.direction}">
+        <div class="meta">${m.sender_name||m.direction} · ${fmtDate(m.created_at)}</div>
+        ${escapeHtml(m.text||'')}
+        ${m.attachment_url ? `<div style="margin-top:6px"><a href="${m.attachment_url}" target="_blank" style="color:var(--accent)">📎 Attachment</a></div>` : ''}
+      </div>`).join('') || '<div class="empty">No messages yet.</div>';
+    document.getElementById('detail-thread').innerHTML = thread;
+    document.getElementById('detail-meta').innerHTML = `
+      <p><b>Status:</b> ${statusTag(t.status)}</p>
+      <p><b>Priority:</b> ${priorityTag(t.priority)}</p>
+      <p><b>User:</b> ${t.user_name||t.user_id} (${t.user_id})</p>
+      <p><b>Category:</b> ${t.category||'—'}</p>
+      <p><b>Assigned:</b> ${t.assigned_admin_name||'Unassigned'}</p>
+      <p><b>Created:</b> ${fmtDate(t.created_at)}</p>
+      <p><b>SLA due:</b> ${fmtDate(t.sla_due_at)}</p>
+      ${t.transaction_id ? `<p><b>Transaction:</b> ${t.transaction_id}</p>` : ''}
+      ${t.wallet_address ? `<p><b>Wallet:</b> ${t.wallet_address}</p>` : ''}`;
+  } catch(e) {
+    document.getElementById('detail-thread').innerHTML =
+      '<div class="empty">Could not load ticket.</div>';
+  }
+}
+
+/* ---------- REPLY & ACTIONS ---------- */
+async function sendReply() {
+  const text = document.getElementById('reply-text').value.trim();
+  if (!text || !currentTicketId) return;
+  try {
+    await api('/tickets/' + currentTicketId + '/reply', {
+      method: 'POST', body: JSON.stringify({ text })
+    });
+    document.getElementById('reply-text').value = '';
+    openTicket(currentTicketId);
+  } catch(e) { alert('Reply failed: ' + e.message); }
+}
+async function sendInternalNote() {
+  const text = document.getElementById('reply-text').value.trim();
+  if (!text || !currentTicketId) return;
+  try {
+    await api('/tickets/' + currentTicketId + '/note', {
+      method: 'POST', body: JSON.stringify({ text })
+    });
+    document.getElementById('reply-text').value = '';
+    openTicket(currentTicketId);
+  } catch(e) { alert('Note failed: ' + e.message); }
+}
+async function resolveTicket() {
+  if (!currentTicketId) return;
+  await api('/tickets/' + currentTicketId + '/status', {
+    method: 'PATCH', body: JSON.stringify({ status: 'resolved' })
+  });
+  openTicket(currentTicketId);
+}
+async function closeTicket() {
+  if (!currentTicketId) return;
+  await api('/tickets/' + currentTicketId + '/status', {
+    method: 'PATCH', body: JSON.stringify({ status: 'closed' })
+  });
+  openTicket(currentTicketId);
+}
+async function claimTicket() {
+  if (!currentTicketId) return;
+  try {
+    await api('/tickets/' + currentTicketId + '/claim', { method: 'POST' });
+    openTicket(currentTicketId);
+  } catch(e) { alert('Claim failed: ' + e.message); }
+}
+async function changePriority() {
+  const p = prompt('New priority (low / normal / high / urgent):');
+  if (!p || !currentTicketId) return;
+  await api('/tickets/' + currentTicketId + '/priority', {
+    method: 'PATCH', body: JSON.stringify({ priority: p })
+  });
+  openTicket(currentTicketId);
+}
+async function escalateTicket() {
+  if (!currentTicketId) return;
+  await api('/tickets/' + currentTicketId + '/escalate', { method: 'POST' });
+  openTicket(currentTicketId);
+}
+let showNotes = true;
+function toggleNoteView() { showNotes = !showNotes; openTicket(currentTicketId); }
+
+/* ---------- BROADCAST ---------- */
+document.getElementById('bc-target').addEventListener('change', e => {
+  document.getElementById('bc-ids-group').style.display =
+    e.target.value.startsWith('specific') ? 'block' : 'none';
+});
+function addInlineButtonRow() {
+  const div = document.createElement('div');
+  div.className = 'inline-btn-row';
+  div.innerHTML = `<input placeholder="Button label" class="ib-label">
+    <input placeholder="URL (https://…)" class="ib-url">
+    <button class="btn btn-sm btn-red" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('inline-btn-builder').appendChild(div);
+}
+function collectInlineButtons() {
+  const rows = [];
+  document.querySelectorAll('#inline-btn-builder .inline-btn-row').forEach(row => {
+    const label = row.querySelector('.ib-label').value.trim();
+    const url = row.querySelector('.ib-url').value.trim();
+    if (label && url) rows.push([{ text: label, url }]);
+  });
+  return rows;
+}
+async function previewBroadcast() {
+  const text = document.getElementById('bc-text').value;
+  const buttons = collectInlineButtons();
+  document.getElementById('bc-status').innerHTML =
+    `<b>Preview:</b><br>${escapeHtml(text).replace(/\n/g,'<br>')}<br>
+     <b>Buttons:</b> ${buttons.length ? buttons.map(r=>r[0].text).join(' | ') : 'None'}<br>
+     <b>Audience:</b> ${document.getElementById('bc-target').value}`;
+}
+async function sendBroadcast() {
+  const payload = {
+    text: document.getElementById('bc-text').value.trim(),
+    media: document.getElementById('bc-media').value.trim(),
+    attach_media_from_reply: document.getElementById('bc-attach-media').checked,
+    inline_buttons: collectInlineButtons(),
+    target: document.getElementById('bc-target').value,
+    ids: document.getElementById('bc-ids').value.trim()
+  };
+  if (!payload.text && !payload.media && !payload.attach_media_from_reply) {
+    alert('Add text, media, or enable media attachment.'); return;
+  }
+  document.getElementById('bc-status').textContent = 'Sending…';
+  try {
+    const res = await api('/broadcast', { method: 'POST', body: JSON.stringify(payload) });
+    document.getElementById('bc-status').innerHTML =
+      `✅ Broadcast started. Job ID: <code>${res.job_id}</code><br>
+       Sent: ${res.sent||0} · Failed: ${res.failed||0}`;
+  } catch(e) {
+    document.getElementById('bc-status').textContent = '❌ ' + e.message;
+  }
+}
+function resetBroadcast() {
+  ['bc-text','bc-media','bc-ids'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('bc-attach-media').checked = false;
+  document.getElementById('inline-btn-builder').innerHTML =
+    `<div class="inline-btn-row"><input placeholder="Button label" class="ib-label">
+     <input placeholder="URL (https://…)" class="ib-url">
+     <button class="btn btn-sm btn-red" onclick="this.parentElement.remove()">✕</button></div>`;
+  document.getElementById('bc-status').textContent = '';
+}
+
+/* ---------- ADMIN STATS ---------- */
+async function loadAdminStats() {
+  try {
+    const data = await api('/stats/admins');
+    document.getElementById('admin-stats').innerHTML = `
+      <div class="stat-card"><div class="label">Active Admins</div><div class="value">${data.active||0}</div></div>
+      <div class="stat-card"><div class="label">Total Solved</div><div class="value green">${data.total_solved||0}</div></div>
+      <div class="stat-card"><div class="label">Avg Resolution</div><div class="value">${data.avg_resolution||'—'}</div></div>`;
+    document.getElementById('admin-table').innerHTML = (data.admins||[]).map(a => `
+      <tr><td>${a.name||a.id}</td><td>${a.claimed||0}</td><td>${a.solved||0}</td>
+        <td>${a.in_progress||0}</td><td>${a.avg_first_response||'—'}</td>
+        <td>${a.avg_resolution||'—'}</td><td>${a.sla_percent||'—'}%</td>
+        <td>${a.csat||'—'}</td></tr>`).join('')
+      || '<tr><td colspan="8" class="empty">No admin data yet.</td></tr>';
+  } catch(e) { console.error(e); }
+}
+
+/* ---------- AUDIT LOG ---------- */
+async function loadAudit() {
+  try {
+    const q = document.getElementById('audit-search').value.trim();
+    const data = await api('/audit?q=' + encodeURIComponent(q));
+    document.getElementById('audit-table').innerHTML = (data.events||[]).map(e => `
+      <tr><td>${fmtDate(e.timestamp)}</td><td>${e.actor_name||e.actor_id}</td>
+        <td>${e.action}</td><td>#${e.ticket_number||'—'}</td>
+        <td>${escapeHtml(e.details||'')}</td></tr>`).join('')
+      || '<tr><td colspan="5" class="empty">No audit events.</td></tr>';
+  } catch(e) { console.error(e); }
+}
+
+/* ---------- SETTINGS ---------- */
+async function saveSettings() {
+  await api('/settings', { method: 'POST', body: JSON.stringify({
+    admin_group_id: document.getElementById('set-group-id').value,
+    default_topic_id: document.getElementById('set-topic-id').value
+  })});
+  alert('Settings saved.');
+}
+
+/* ---------- UTIL ---------- */
+function escapeHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ---------- BOOT ---------- */
+loadOverview();
+</script>
+</body>
+</html>
