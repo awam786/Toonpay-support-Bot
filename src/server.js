@@ -1,19 +1,10 @@
 require('dotenv').config();
 const express = require('express');
-const path = require('path');
-const { bot } = require('./bot');
+const { bot, syncAdminsFromGroup } = require('./bot');
 const { init, pool } = require('./db');
-const apiRouter = require('./api');
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
-
-// dashboard
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'dashboard.html')));
-
-// API
-app.use('/api', apiRouter);
 
 // Telegram webhook
 app.post('/webhook', (req, res) => {
@@ -27,7 +18,6 @@ app.post('/webhook', (req, res) => {
   });
 });
 
-// health
 app.get('/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -36,6 +26,8 @@ app.get('/health', async (req, res) => {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
+
+app.get('/', (req, res) => res.send('ToonPay Support Bot is running.'));
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 
@@ -56,6 +48,9 @@ async function start() {
   } else {
     console.warn('PUBLIC_DOMAIN or WEBHOOK_SECRET missing — webhook not registered');
   }
+
+  // Sync admins from the group on every boot
+  await syncAdminsFromGroup();
 
   app.listen(PORT, () => console.log(`Server listening on :${PORT}`));
 }
