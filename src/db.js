@@ -67,7 +67,7 @@ async function init() {
       chat_id BIGINT NOT NULL,
       message_id BIGINT NOT NULL,
       source TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(chat_id, message_id)
     );
 
@@ -76,9 +76,12 @@ async function init() {
       telegram_id BIGINT UNIQUE NOT NULL,
       name TEXT,
       role TEXT DEFAULT 'agent',
-      available BOOLEAN DEFAULT true,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      active BOOLEAN DEFAULT true,
+      source TEXT DEFAULT 'group',
+      created_at TIMESTAMP DEFAULT NOW()
     );
+    ALTER TABLE admins ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+    ALTER TABLE admins ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'group';
 
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -91,7 +94,6 @@ async function init() {
       last_seen TIMESTAMP DEFAULT NOW(),
       blocked BOOLEAN DEFAULT false
     );
-    -- migration: add language column if missing on old deployments
     ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT;
 
     CREATE TABLE IF NOT EXISTS groups (
@@ -103,12 +105,16 @@ async function init() {
       active BOOLEAN DEFAULT true
     );
 
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
+    CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
 
     CREATE TABLE IF NOT EXISTS pending_replies (
+      admin_id BIGINT PRIMARY KEY,
+      ticket_id INTEGER NOT NULL,
+      chat_id BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS pending_notes (
       admin_id BIGINT PRIMARY KEY,
       ticket_id INTEGER NOT NULL,
       chat_id BIGINT NOT NULL,
@@ -149,12 +155,13 @@ async function init() {
     CREATE INDEX IF NOT EXISTS idx_events_ts ON ticket_events(timestamp DESC);
   `);
 
-  const adminIds = (process.env.ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
-  for (const id of adminIds) {
+  // Bootstrap the OWNER (bot creator) — cannot be removed via group leave
+  if (process.env.OWNER_ID) {
     await pool.query(
-      `INSERT INTO admins (telegram_id, role) VALUES ($1, 'super_admin')
-       ON CONFLICT (telegram_id) DO NOTHING`,
-      [id]
+      `INSERT INTO admins (telegram_id, role, active, source)
+       VALUES ($1, 'super_admin', true, 'owner')
+       ON CONFLICT (telegram_id) DO UPDATE SET role='super_admin', active=true, source='owner'`,
+      [process.env.OWNER_ID]
     );
   }
 
