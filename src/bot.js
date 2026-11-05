@@ -9,12 +9,10 @@ async function getSetting(key) {
   const r = await pool.query('SELECT value FROM settings WHERE key=$1', [key]);
   return r.rows[0]?.value;
 }
-
 async function getUser(userId) {
   const r = await pool.query('SELECT * FROM users WHERE telegram_id=$1', [userId]);
   return r.rows[0];
 }
-
 async function upsertUser(from) {
   await pool.query(
     `INSERT INTO users (telegram_id, username, first_name, last_name)
@@ -25,29 +23,23 @@ async function upsertUser(from) {
     [from.id, from.username, from.first_name, from.last_name]
   );
 }
-
 async function setLanguage(userId, lang) {
   await pool.query('UPDATE users SET language=$1 WHERE telegram_id=$2', [lang, userId]);
 }
-
 async function getUserLanguage(userId) {
   const u = await getUser(userId);
   return u?.language || null;
 }
-
 async function isAdmin(userId) {
   const r = await pool.query(
-    'SELECT 1 FROM admins WHERE telegram_id=$1 AND active=true',
-    [userId]
+    'SELECT 1 FROM admins WHERE telegram_id=$1 AND active=true', [userId]
   );
   return r.rows.length > 0;
 }
-
 async function getAdminName(userId) {
   const r = await pool.query('SELECT name FROM admins WHERE telegram_id=$1', [userId]);
   return r.rows[0]?.name || `@${userId}`;
 }
-
 async function audit(ticketId, actorId, actorName, action, oldVal, newVal, details) {
   await pool.query(
     `INSERT INTO ticket_events (ticket_id, actor_id, actor_name, actor_type, action, old_value, new_value, details)
@@ -55,18 +47,14 @@ async function audit(ticketId, actorId, actorName, action, oldVal, newVal, detai
     [ticketId, actorId, actorName, action, oldVal || null, newVal || null, details || null]
   );
 }
-
-// ★ Markdown safety — escape special chars so Telegram doesn't reject the message
 function escapeMd(text) {
   if (text === null || text === undefined) return '';
   return String(text).replace(/([_*`\[\]\\])/g, '\\$1');
 }
-
 function maskWallet(w) {
   if (!w || w.length < 10) return w || '';
   return w.slice(0, 6) + '…' + w.slice(-4);
 }
-
 function timeAgo(date) {
   const sec = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
   if (sec < 60) return `${sec}s ago`;
@@ -89,20 +77,15 @@ async function upsertAdminFromTelegram(user, role = 'agent') {
     [user.id, name, role]
   );
 }
-
 async function deactivateAdmin(telegramId) {
   await pool.query(
     `UPDATE admins SET active=false WHERE telegram_id=$1 AND source != 'owner'`,
     [telegramId]
   );
 }
-
 async function syncAdminsFromGroup() {
   const groupId = await getSetting('admin_group_id');
-  if (!groupId) {
-    console.warn('No admin_group_id — skipping group sync');
-    return;
-  }
+  if (!groupId) { console.warn('No admin_group_id — skipping group sync'); return; }
   try {
     const members = await bot.telegram.getChatAdministrators(groupId);
     for (const m of members) {
@@ -111,9 +94,7 @@ async function syncAdminsFromGroup() {
       await upsertAdminFromTelegram(m.user, role);
     }
     console.log(`Synced ${members.length} admin(s) from group ${groupId}`);
-  } catch (e) {
-    console.error('syncAdminsFromGroup failed:', e.message);
-  }
+  } catch (e) { console.error('syncAdminsFromGroup failed:', e.message); }
 }
 
 // ================ user state ================
@@ -142,15 +123,13 @@ function languageKeyboard(currentLang) {
       const code = LANGUAGE_ORDER[i + j];
       const L = LANGUAGES[code];
       row.push(Markup.button.callback(
-        `${L.flag} ${L.name}${code === currentLang ? ' ✓' : ''}`,
-        `lang:${code}`
+        `${L.flag} ${L.name}${code === currentLang ? ' ✓' : ''}`, `lang:${code}`
       ));
     }
     rows.push(row);
   }
   return Markup.inlineKeyboard(rows);
 }
-
 function categoryKeyboard(lang) {
   return Markup.inlineKeyboard([
     [Markup.button.callback(t(lang, 'cat_payment'), 'nt:cat:payment'),
@@ -162,7 +141,6 @@ function categoryKeyboard(lang) {
     [Markup.button.callback(t(lang, 'btn_change_lang'), 'lang:menu')],
   ]);
 }
-
 function guideKeyboard(lang) {
   return Markup.inlineKeyboard([
     [Markup.button.callback(t(lang, 'btn_create'), 'nt:start')],
@@ -171,12 +149,8 @@ function guideKeyboard(lang) {
     [Markup.button.callback(t(lang, 'btn_change_lang'), 'lang:menu')],
   ]);
 }
-
 async function sendGuide(ctx, lang) {
-  await ctx.reply(t(lang, 'guide'), {
-    parse_mode: 'Markdown',
-    ...guideKeyboard(lang)
-  });
+  await ctx.reply(t(lang, 'guide'), { parse_mode: 'Markdown', ...guideKeyboard(lang) });
 }
 
 // ================ ticket card ================
@@ -192,7 +166,6 @@ function ticketCardKeyboard(ticketId) {
      Markup.button.callback('📜 Audit', `audit:${ticketId}`)]
   ]);
 }
-
 function priorityKeyboard(ticketId) {
   return Markup.inlineKeyboard([
     [Markup.button.callback('🟢 Low', `setpri:${ticketId}:low`),
@@ -202,8 +175,6 @@ function priorityKeyboard(ticketId) {
     [Markup.button.callback('« Cancel', `cancel_pri:${ticketId}`)]
   ]);
 }
-
-// ★ All user-supplied fields wrapped in escapeMd() — safe for Telegram Markdown
 function cardText(t_) {
   return `🎫 *Ticket #${t_.ticket_number}*
 Status: ${escapeMd(t_.status)} | Priority: ${escapeMd(t_.priority)}
@@ -213,8 +184,6 @@ Subject: ${escapeMd(t_.subject || '—')}
 Assigned: ${escapeMd(t_.assigned_admin_name || 'Unassigned')}
 ${t_.transaction_id ? `Tx: \`${t_.transaction_id}\`\n` : ''}${t_.wallet_address ? `Wallet: \`${maskWallet(t_.wallet_address)}\`\n` : ''}Created: ${new Date(t_.created_at).toISOString().slice(0, 16).replace('T', ' ')}`;
 }
-
-// ★ Plain-text version for fallback when Markdown parsing fails
 function cardTextPlain(t_) {
   return `🎫 Ticket #${t_.ticket_number}
 Status: ${t_.status} | Priority: ${t_.priority}
@@ -225,47 +194,40 @@ Assigned: ${t_.assigned_admin_name || 'Unassigned'}
 ${t_.transaction_id ? `Tx: ${t_.transaction_id}\n` : ''}${t_.wallet_address ? `Wallet: ${maskWallet(t_.wallet_address)}\n` : ''}Created: ${new Date(t_.created_at).toISOString().slice(0, 16).replace('T', ' ')}`;
 }
 
-// ★ Posts ticket to admin group WITH plain-text fallback on Markdown failure
 async function postTicketToGroup(t_) {
   const groupId = await getSetting('admin_group_id');
   if (!groupId) {
-    console.error(`❌ postTicketToGroup: admin_group_id is NOT set — ticket #${t_.ticket_number} not delivered`);
+    console.error(`❌ postTicketToGroup: admin_group_id NOT set — ticket #${t_.ticket_number} not delivered`);
     return;
   }
   try {
     const sent = await bot.telegram.sendMessage(groupId, cardText(t_), {
-      parse_mode: 'Markdown',
-      ...ticketCardKeyboard(t_.id)
+      parse_mode: 'Markdown', ...ticketCardKeyboard(t_.id)
     });
-    await pool.query(
-      'UPDATE tickets SET group_chat_id=$1, card_message_id=$2 WHERE id=$3',
-      [groupId, sent.message_id, t_.id]
-    );
+    await pool.query('UPDATE tickets SET group_chat_id=$1, card_message_id=$2 WHERE id=$3',
+      [groupId, sent.message_id, t_.id]);
     await pool.query(
       `INSERT INTO message_mappings (ticket_id, chat_id, message_id, source)
        VALUES ($1,$2,$3,'card') ON CONFLICT DO NOTHING`,
       [t_.id, groupId, sent.message_id]
     );
-    console.log(`✅ Ticket #${t_.ticket_number} posted to group ${groupId} (msg ${sent.message_id})`);
+    console.log(`✅ Ticket #${t_.ticket_number} posted to group ${groupId}`);
   } catch (e) {
-    console.error(`❌ postTicketToGroup (markdown) failed for #${t_.ticket_number}: ${e.message}`);
-    // ★ Fallback: retry as plain text (no parse_mode)
+    console.error(`❌ postTicketToGroup markdown failed for #${t_.ticket_number}: ${e.message}`);
     try {
       const sent = await bot.telegram.sendMessage(groupId, cardTextPlain(t_), {
         ...ticketCardKeyboard(t_.id)
       });
-      await pool.query(
-        'UPDATE tickets SET group_chat_id=$1, card_message_id=$2 WHERE id=$3',
-        [groupId, sent.message_id, t_.id]
-      );
+      await pool.query('UPDATE tickets SET group_chat_id=$1, card_message_id=$2 WHERE id=$3',
+        [groupId, sent.message_id, t_.id]);
       await pool.query(
         `INSERT INTO message_mappings (ticket_id, chat_id, message_id, source)
          VALUES ($1,$2,$3,'card') ON CONFLICT DO NOTHING`,
         [t_.id, groupId, sent.message_id]
       );
-      console.log(`✅ Ticket #${t_.ticket_number} posted to group ${groupId} (plain fallback)`);
+      console.log(`✅ Ticket #${t_.ticket_number} posted to group ${groupId} (plain)`);
     } catch (e2) {
-      console.error(`❌ FALLBACK ALSO FAILED for #${t_.ticket_number}: ${e2.message}`);
+      console.error(`❌ FALLBACK FAILED for #${t_.ticket_number}: ${e2.message}`);
     }
   }
 }
@@ -279,31 +241,27 @@ async function refreshCard(ticketId) {
       cardText(tk),
       { parse_mode: 'Markdown', ...ticketCardKeyboard(tk.id) }
     );
-  } catch (_) {
-    // Ignore "message not modified" and other edit errors — non-fatal
-  }
+  } catch (_) {}
 }
 
-// ================ send to user (admin reply) ================
-// ★ escapeMd() applied so admin replies with special chars still deliver
+// ================ send to user (with reply hint footer) ================
 async function sendToUser(ticketId, text, senderId, senderName) {
   const tk = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticketId])).rows[0];
   if (!tk) throw new Error('Ticket not found');
 
+  // ★ Get user's language and build localized reply hint
+  const lang = (await getUserLanguage(tk.user_id)) || 'en';
+  const hint = formatTemplate(t(lang, 'reply_hint'), { number: tk.ticket_number });
+
+  const bodyMd = `📩 *Ticket #${tk.ticket_number}*\n\n${escapeMd(text)}\n\n━━━━━━━━━━━━━━\n${hint}`;
+  const bodyPlain = `📩 Ticket #${tk.ticket_number}\n\n${text}\n\n━━━━━━━━━━━━━━\n${hint}`;
+
   let sent;
   try {
-    sent = await bot.telegram.sendMessage(
-      tk.user_id,
-      `📩 *Ticket #${tk.ticket_number}*\n\n${escapeMd(text)}`,
-      { parse_mode: 'Markdown' }
-    );
+    sent = await bot.telegram.sendMessage(tk.user_id, bodyMd, { parse_mode: 'Markdown' });
   } catch (e) {
-    // Fallback without Markdown
     console.error(`sendToUser markdown failed for #${tk.ticket_number}: ${e.message}`);
-    sent = await bot.telegram.sendMessage(
-      tk.user_id,
-      `📩 Ticket #${tk.ticket_number}\n\n${text}`
-    );
+    sent = await bot.telegram.sendMessage(tk.user_id, bodyPlain);
   }
 
   await pool.query(
@@ -325,18 +283,15 @@ bot.start(async (ctx) => {
   }
   await sendGuide(ctx, u.language);
 });
-
 bot.command('language', async (ctx) => {
   const u = await getUser(ctx.from.id);
   await ctx.reply(t(u?.language || 'en', 'choose_lang'), { ...languageKeyboard(u?.language) });
 });
-
 bot.action('lang:menu', async (ctx) => {
   await ctx.answerCbQuery();
   const u = await getUser(ctx.from.id);
   await ctx.reply(t(u?.language || 'en', 'choose_lang'), { ...languageKeyboard(u?.language) });
 });
-
 bot.action(/^lang:([a-z]{2})$/, async (ctx) => {
   const code = ctx.match[1];
   if (!LANGUAGES[code]) return ctx.answerCbQuery('Invalid language');
@@ -346,50 +301,40 @@ bot.action(/^lang:([a-z]{2})$/, async (ctx) => {
   try { await ctx.deleteMessage(); } catch (_) {}
   await sendGuide(ctx, code);
 });
-
 bot.command('guide', async (ctx) => {
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await sendGuide(ctx, lang);
 });
-
 bot.action('guide:show', async (ctx) => {
   await ctx.answerCbQuery();
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await sendGuide(ctx, lang);
 });
-
 bot.command('newticket', async (ctx) => {
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await ctx.reply(t(lang, 'newticket_choose_cat'), { ...categoryKeyboard(lang) });
 });
-
 bot.action('nt:start', async (ctx) => {
   await ctx.answerCbQuery();
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await ctx.reply(t(lang, 'newticket_choose_cat'), { ...categoryKeyboard(lang) });
 });
-
 bot.action(/^nt:cat:(\w+)$/, async (ctx) => {
   const category = ctx.match[1];
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await setUserState(ctx.from.id, 'awaiting_description', { category });
   await ctx.answerCbQuery();
-  await ctx.reply(t(lang, 'newticket_describe'), {
-    reply_markup: { force_reply: true }
-  });
+  await ctx.reply(t(lang, 'newticket_describe'), { reply_markup: { force_reply: true } });
 });
-
 bot.command('mytickets', async (ctx) => {
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await sendMyTickets(ctx, lang);
 });
-
 bot.action('mt:show', async (ctx) => {
   await ctx.answerCbQuery();
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   await sendMyTickets(ctx, lang);
 });
-
 async function sendMyTickets(ctx, lang) {
   const r = await pool.query(
     'SELECT * FROM tickets WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20',
@@ -405,7 +350,6 @@ async function sendMyTickets(ctx, lang) {
   txt += `\n\n/status <id>`;
   await ctx.reply(txt, { parse_mode: 'Markdown' });
 }
-
 bot.command('status', async (ctx) => {
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   const num = parseInt(ctx.message.text.split(' ')[1]);
@@ -425,74 +369,104 @@ bot.command('status', async (ctx) => {
   await ctx.reply(escapeMd(body), { parse_mode: 'Markdown' });
 });
 
-// ================= ADMIN COMMANDS =================
-bot.command('admin', async (ctx) => {
-  if (!(await isAdmin(ctx.from.id))) return ctx.reply('Not authorized');
-  await ctx.reply(`👨‍💼 *Admin Commands*
-
-*Ticket management*
-/reply \`<#> <text>\` — reply to user
-/note \`<#> <text>\` — internal note
-/ticket \`<#>\` — show ticket card
-/claim \`<#>\` — claim a ticket
-/assign \`<#> <@user|id>\` — assign to admin
-/priority \`<#> <low|normal|high|urgent>\`
-/escalate \`<#>\` — mark urgent
-/resolve \`<#>\` — mark resolved
-/close \`<#>\` — close ticket
-
-*Lists & search*
-/open — open tickets (last 20)
-/unassigned — unclaimed queue
-/mine — my assigned tickets
-/search \`<keyword>\` — search by user, wallet, tx, subject
-
-*Reports*
-/stats — overall counts
-/stats_admin — per-admin performance
-/audit — recent audit log
-/audit \`<#>\` — audit trail for one ticket
-/admins — list active admins
-
-*Broadcast*
-/broadcast — start broadcast flow
-/skip — advance to next step
-/cancel — cancel any pending action
-
-📌 You can also use the buttons on any ticket card in this group.`,
-    { parse_mode: 'Markdown' });
-});
-
-// ---- /reply (admin + user fallback) ----
+// ================= ★★★ /reply — FIXED OWNERSHIP-AWARE LOGIC ★★★ =================
 bot.command('reply', async (ctx) => {
-  if (!(await isAdmin(ctx.from.id))) {
-    const lang = (await getUserLanguage(ctx.from.id)) || 'en';
-    const parts = ctx.message.text.split(' ');
-    const num = parseInt(parts[1]);
-    const text = parts.slice(2).join(' ');
-    if (!num || !text) return ctx.reply(t(lang, 'reply_usage'));
-    const r = await pool.query(
-      'SELECT * FROM tickets WHERE ticket_number=$1 AND user_id=$2',
-      [num, ctx.from.id]
-    );
-    if (r.rows.length === 0) return ctx.reply(t(lang, 'status_not_found'));
-    await addUserMessageToTicket(ctx, r.rows[0], text);
-    return ctx.reply(formatTemplate(t(lang, 'msg_added'), { number: num }));
-  }
   const parts = ctx.message.text.split(' ');
   const num = parseInt(parts[1]);
-  const text = parts.slice(2).join(' ');
-  if (!num || !text) return ctx.reply('Usage: /reply <ticket#> <message>');
+  const text = parts.slice(2).join(' ').trim();
+  const lang = (await getUserLanguage(ctx.from.id)) || 'en';
+  const senderIsAdmin = await isAdmin(ctx.from.id);
+
+  // Missing arguments
+  if (!num || !text) {
+    if (senderIsAdmin) return ctx.reply('Usage: /reply <ticket#> <message>');
+    return ctx.reply(t(lang, 'reply_usage'));
+  }
+
+  // Ticket must exist
   const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
-  if (!tk) return ctx.reply('Ticket not found');
+  if (!tk) {
+    if (senderIsAdmin) return ctx.reply('Ticket not found');
+    return ctx.reply(t(lang, 'status_not_found'));
+  }
+
+  // ★ CASE A: Sender owns the ticket → treat as USER reply (works for admins testing too)
+  if (tk.user_id === ctx.from.id) {
+    await addUserMessageToTicket(ctx, tk, text);
+    return ctx.reply(formatTemplate(t(lang, 'msg_added'), { number: num }));
+  }
+
+  // ★ CASE B: Sender does NOT own the ticket → must be admin
+  if (!senderIsAdmin) {
+    return ctx.reply(t(lang, 'status_not_found'));
+  }
+
+  // Admin replying to someone else's ticket
   try {
     const name = await getAdminName(ctx.from.id);
     await sendToUser(tk.id, text, ctx.from.id, name);
-    await ctx.reply(`✅ Reply delivered for #${num}`);
+    await ctx.reply(`✅ Reply delivered to user for #${num}`);
   } catch (e) {
     await ctx.reply(`❌ Failed: ${escapeMd(e.message)}`, { parse_mode: 'Markdown' });
   }
 });
+
+// ================= HELP =================
+async function handleHelpCommand(ctx) {
+  const userIsAdmin = await isAdmin(ctx.from.id);
+  if (!userIsAdmin) {
+    if (ctx.chat.type !== 'private') return;
+    const lang = (await getUserLanguage(ctx.from.id)) || 'en';
+    return sendGuide(ctx, lang);
+  }
+
+  const helpText =
+`👨‍💼 *ToonPay Admin Help*
+
+*📋 Ticket Management*
+\`/reply <#> <text>\` — Reply to the user
+\`/note <#> <text>\` — Internal note (user never sees)
+\`/ticket <#>\` — Show ticket card with action buttons
+\`/claim <#>\` — Claim a ticket
+\`/assign <#> <@user|id>\` — Assign to another admin
+\`/priority <#> <low|normal|high|urgent>\` — Change priority
+\`/escalate <#>\` — Mark as urgent
+\`/resolve <#>\` — Mark resolved
+\`/close <#>\` — Close ticket
+
+*🔍 Lists & Search*
+\`/open\` — List open tickets (last 20)
+\`/unassigned\` — Unclaimed queue
+\`/mine\` — Your assigned tickets
+\`/search <keyword>\` — Search by user, tx, wallet, subject
+
+*📊 Reports*
+\`/stats\` — Overall counts
+\`/stats_admin\` — Per-admin performance
+\`/audit\` — Recent activity
+\`/audit <#>\` — Full audit trail for one ticket
+\`/admins\` — List active admins
+
+*📢 Broadcast*
+\`/broadcast\` — Start broadcast flow
+\`/skip\` — Advance step / skip buttons
+\`/cancel\` — Cancel any pending action
+
+*💡 How it works*
+• Plain messages in this group are *NOT* sent to users
+• Use the 💬 Reply button or \`/reply\` command
+• Every action is logged in the audit trail
+
+*🙋 Quick workflow*
+1. \`/open\` or \`/unassigned\` → find a ticket
+2. \`/claim <#>\` → take ownership
+3. 💬 Reply or \`/reply <#> text\` → answer user
+4. \`/resolve <#>\` → mark done`;
+
+  await ctx.reply(helpText, { parse_mode: 'Markdown', disable_web_page_preview: true });
+}
+bot.command('help', handleHelpCommand);
+bot.command('admin', handleHelpCommand);
 
 // ---- /note ----
 bot.command('note', async (ctx) => {
@@ -506,7 +480,6 @@ bot.command('note', async (ctx) => {
   await saveInternalNote(tk.id, ctx.from.id, text);
   await ctx.reply(`📝 Internal note saved for #${num}`);
 });
-
 async function saveInternalNote(ticketId, adminId, text) {
   const name = await getAdminName(adminId);
   await pool.query(
@@ -538,7 +511,6 @@ bot.command('claim', async (ctx) => {
   if (!num) return ctx.reply('Usage: /claim <ticket#>');
   await doClaim(ctx, num, ctx.from.id);
 });
-
 async function doClaim(ctx, num, adminId) {
   const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
   if (!tk) return ctx.reply('Ticket not found');
@@ -566,12 +538,10 @@ bot.command('assign', async (ctx) => {
   if (!num || !target) return ctx.reply('Usage: /assign <ticket#> <@username|id>');
   const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
   if (!tk) return ctx.reply('Ticket not found');
-
   let adminRow;
   if (target.startsWith('@')) {
     adminRow = (await pool.query(
-      `SELECT * FROM admins WHERE LOWER(name) = LOWER($1) AND active = true`,
-      [target]
+      `SELECT * FROM admins WHERE LOWER(name) = LOWER($1) AND active = true`, [target]
     )).rows[0];
   } else {
     adminRow = (await pool.query(
@@ -579,7 +549,6 @@ bot.command('assign', async (ctx) => {
     )).rows[0];
   }
   if (!adminRow) return ctx.reply('Admin not found. They must be in the admin group.');
-
   await pool.query(
     `UPDATE tickets SET assigned_admin_id=$1, assigned_admin_name=$2,
        status = CASE WHEN status='open' THEN 'in_progress' ELSE status END,
@@ -636,8 +605,7 @@ bot.command('resolve', async (ctx) => {
   const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
   if (!tk) return ctx.reply('Ticket not found');
   await pool.query(
-    `UPDATE tickets SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE id=$1`,
-    [tk.id]
+    `UPDATE tickets SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE id=$1`, [tk.id]
   );
   const name = await getAdminName(ctx.from.id);
   await audit(tk.id, ctx.from.id, name, 'status_change', tk.status, 'resolved');
@@ -646,8 +614,7 @@ bot.command('resolve', async (ctx) => {
   try {
     const lang = (await getUserLanguage(tk.user_id)) || 'en';
     await bot.telegram.sendMessage(tk.user_id,
-      `✅ ${t(lang, 'statuses')['resolved']} — *#${tk.ticket_number}*`,
-      { parse_mode: 'Markdown' });
+      `✅ ${t(lang, 'statuses')['resolved']} — *#${tk.ticket_number}*`, { parse_mode: 'Markdown' });
   } catch (_) {}
 });
 
@@ -669,19 +636,14 @@ bot.command('close', async (ctx) => {
 bot.command('open', async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.reply('Not authorized');
   const r = await pool.query(`
-    SELECT ticket_number, user_name, category, priority, status, created_at
+    SELECT ticket_number, user_name, category, priority, created_at
     FROM tickets WHERE status IN ('open','in_progress','pending')
-    ORDER BY CASE WHEN priority='urgent' THEN 1
-                  WHEN priority='high' THEN 2
-                  WHEN priority='normal' THEN 3 ELSE 4 END,
-             created_at ASC
-    LIMIT 20
-  `);
+    ORDER BY CASE WHEN priority='urgent' THEN 1 WHEN priority='high' THEN 2
+                  WHEN priority='normal' THEN 3 ELSE 4 END, created_at ASC LIMIT 20`);
   if (r.rows.length === 0) return ctx.reply('✅ No open tickets.');
   let txt = `📂 *Open Tickets (${r.rows.length})*\n\n`;
   for (const t_ of r.rows) {
-    const p = t_.priority === 'urgent' ? '🔴' :
-              t_.priority === 'high' ? '🟡' : '⚪';
+    const p = t_.priority === 'urgent' ? '🔴' : t_.priority === 'high' ? '🟡' : '⚪';
     txt += `${p} #${t_.ticket_number} · ${escapeMd(t_.user_name || '—')} · ${escapeMd(t_.category || 'other')} · ${timeAgo(t_.created_at)}\n`;
   }
   txt += `\nTap a ticket number with /ticket <#> to open.`;
@@ -693,10 +655,8 @@ bot.command('unassigned', async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.reply('Not authorized');
   const r = await pool.query(`
     SELECT ticket_number, user_name, category, priority, created_at
-    FROM tickets WHERE assigned_admin_id IS NULL
-      AND status IN ('open','in_progress','pending')
-    ORDER BY created_at ASC LIMIT 20
-  `);
+    FROM tickets WHERE assigned_admin_id IS NULL AND status IN ('open','in_progress','pending')
+    ORDER BY created_at ASC LIMIT 20`);
   if (r.rows.length === 0) return ctx.reply('✅ No unassigned tickets.');
   let txt = `🆓 *Unassigned Tickets (${r.rows.length})*\n\n`;
   for (const t_ of r.rows) {
@@ -711,10 +671,8 @@ bot.command('mine', async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.reply('Not authorized');
   const r = await pool.query(`
     SELECT ticket_number, user_name, category, priority, status, created_at
-    FROM tickets WHERE assigned_admin_id = $1
-      AND status IN ('open','in_progress','pending')
-    ORDER BY created_at ASC LIMIT 20
-  `, [ctx.from.id]);
+    FROM tickets WHERE assigned_admin_id = $1 AND status IN ('open','in_progress','pending')
+    ORDER BY created_at ASC LIMIT 20`, [ctx.from.id]);
   if (r.rows.length === 0) return ctx.reply('✅ You have no open assigned tickets.');
   let txt = `🙋 *Your Assigned Tickets (${r.rows.length})*\n\n`;
   for (const t_ of r.rows) {
@@ -731,14 +689,10 @@ bot.command('search', async (ctx) => {
   const like = `%${q}%`;
   const r = await pool.query(`
     SELECT ticket_number, user_name, category, status, priority, created_at
-    FROM tickets
-    WHERE CAST(ticket_number AS TEXT) = $1
-       OR user_name ILIKE $2
-       OR transaction_id ILIKE $2
-       OR wallet_address ILIKE $2
-       OR subject ILIKE $2
-    ORDER BY created_at DESC LIMIT 20
-  `, [q, like]);
+    FROM tickets WHERE CAST(ticket_number AS TEXT) = $1
+       OR user_name ILIKE $2 OR transaction_id ILIKE $2
+       OR wallet_address ILIKE $2 OR subject ILIKE $2
+    ORDER BY created_at DESC LIMIT 20`, [q, like]);
   if (r.rows.length === 0) return ctx.reply(`No tickets match "${escapeMd(q)}".`, { parse_mode: 'Markdown' });
   let txt = `🔍 *Found ${r.rows.length} ticket(s) for "${escapeMd(q)}":*\n\n`;
   for (const t_ of r.rows) {
@@ -754,23 +708,15 @@ bot.command('stats', async (ctx) => {
   const r = await pool.query('SELECT status, COUNT(*)::int AS c FROM tickets GROUP BY status');
   const s = Object.fromEntries(r.rows.map(x => [x.status, x.c]));
   const overdue = (await pool.query(
-    `SELECT COUNT(*)::int AS c FROM tickets
-     WHERE sla_due_at < NOW() AND status NOT IN ('resolved','closed')`
+    `SELECT COUNT(*)::int AS c FROM tickets WHERE sla_due_at < NOW() AND status NOT IN ('resolved','closed')`
   )).rows[0].c;
   const unclaimed = (await pool.query(
-    `SELECT COUNT(*)::int AS c FROM tickets WHERE assigned_admin_id IS NULL
-     AND status IN ('open','in_progress','pending')`
+    `SELECT COUNT(*)::int AS c FROM tickets WHERE assigned_admin_id IS NULL AND status IN ('open','in_progress','pending')`
   )).rows[0].c;
   await ctx.reply(
-    `📊 *Ticket Stats*\n\n` +
-    `Total open: ${(s.open || 0) + (s.in_progress || 0) + (s.pending || 0)}\n` +
-    `  • Open: ${s.open || 0}\n` +
-    `  • In Progress: ${s.in_progress || 0}\n` +
-    `  • Pending: ${s.pending || 0}\n\n` +
-    `Unclaimed: ${unclaimed}\n` +
-    `Overdue SLA: ${overdue}\n\n` +
-    `Resolved: ${s.resolved || 0}\n` +
-    `Closed: ${s.closed || 0}`,
+    `📊 *Ticket Stats*\n\nTotal open: ${(s.open || 0) + (s.in_progress || 0) + (s.pending || 0)}\n` +
+    `  • Open: ${s.open || 0}\n  • In Progress: ${s.in_progress || 0}\n  • Pending: ${s.pending || 0}\n\n` +
+    `Unclaimed: ${unclaimed}\nOverdue SLA: ${overdue}\n\nResolved: ${s.resolved || 0}\nClosed: ${s.closed || 0}`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -785,12 +731,9 @@ bot.command('stats_admin', async (ctx) => {
            COUNT(t.id) FILTER (WHERE t.assigned_admin_id = a.telegram_id AND t.status = 'in_progress')::int AS in_progress,
            ROUND(AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at))/3600)
              FILTER (WHERE t.resolved_at IS NOT NULL AND t.assigned_admin_id = a.telegram_id)::numeric, 1) AS avg_hours
-    FROM admins a
-    LEFT JOIN tickets t ON t.assigned_admin_id = a.telegram_id
-    WHERE a.active = true
-    GROUP BY a.telegram_id, a.name, a.role
-    ORDER BY solved DESC, claimed DESC
-  `);
+    FROM admins a LEFT JOIN tickets t ON t.assigned_admin_id = a.telegram_id
+    WHERE a.active = true GROUP BY a.telegram_id, a.name, a.role
+    ORDER BY solved DESC, claimed DESC`);
   if (r.rows.length === 0) return ctx.reply('No active admins.');
   let txt = `👥 *Admin Performance*\n\n`;
   for (const row of r.rows) {
@@ -810,8 +753,7 @@ bot.command('audit', async (ctx) => {
     const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
     if (!tk) return ctx.reply('Ticket not found');
     const r = await pool.query(
-      `SELECT * FROM ticket_events WHERE ticket_id=$1 ORDER BY timestamp DESC LIMIT 30`,
-      [tk.id]
+      `SELECT * FROM ticket_events WHERE ticket_id=$1 ORDER BY timestamp DESC LIMIT 30`, [tk.id]
     );
     if (r.rows.length === 0) return ctx.reply('No events.');
     let txt = `📜 *Audit for #${num}*\n\n`;
@@ -824,9 +766,7 @@ bot.command('audit', async (ctx) => {
   }
   const r = await pool.query(`
     SELECT e.*, t.ticket_number FROM ticket_events e
-    LEFT JOIN tickets t ON t.id = e.ticket_id
-    ORDER BY e.timestamp DESC LIMIT 30
-  `);
+    LEFT JOIN tickets t ON t.id = e.ticket_id ORDER BY e.timestamp DESC LIMIT 30`);
   if (r.rows.length === 0) return ctx.reply('No events.');
   let txt = `📜 *Recent Activity*\n\n`;
   for (const e of r.rows) {
@@ -879,7 +819,6 @@ bot.action(/^reply:(\d+)$/, async (ctx) => {
     { reply_markup: { force_reply: true } }
   );
 });
-
 bot.action(/^note:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
@@ -894,7 +833,6 @@ bot.action(/^note:(\d+)$/, async (ctx) => {
     { reply_markup: { force_reply: true } }
   );
 });
-
 bot.action(/^claim:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
@@ -902,15 +840,13 @@ bot.action(/^claim:(\d+)$/, async (ctx) => {
   if (!tk) return ctx.answerCbQuery('Ticket not found');
   await doClaim(ctx, tk.ticket_number, ctx.from.id);
 });
-
 bot.action(/^resolve:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
   const tk = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticketId])).rows[0];
   if (!tk) return ctx.answerCbQuery('Ticket not found');
   await pool.query(
-    `UPDATE tickets SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE id=$1`,
-    [ticketId]
+    `UPDATE tickets SET status='resolved', resolved_at=NOW(), updated_at=NOW() WHERE id=$1`, [ticketId]
   );
   const name = await getAdminName(ctx.from.id);
   await audit(ticketId, ctx.from.id, name, 'status_change', tk.status, 'resolved');
@@ -919,11 +855,9 @@ bot.action(/^resolve:(\d+)$/, async (ctx) => {
   try {
     const lang = (await getUserLanguage(tk.user_id)) || 'en';
     await bot.telegram.sendMessage(tk.user_id,
-      `✅ ${t(lang, 'statuses')['resolved']} — *#${tk.ticket_number}*`,
-      { parse_mode: 'Markdown' });
+      `✅ ${t(lang, 'statuses')['resolved']} — *#${tk.ticket_number}*`, { parse_mode: 'Markdown' });
   } catch (_) {}
 });
-
 bot.action(/^close:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
@@ -935,7 +869,6 @@ bot.action(/^close:(\d+)$/, async (ctx) => {
   await refreshCard(ticketId);
   await ctx.answerCbQuery('Closed');
 });
-
 bot.action(/^escalate:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
@@ -945,14 +878,11 @@ bot.action(/^escalate:(\d+)$/, async (ctx) => {
   await refreshCard(ticketId);
   await ctx.answerCbQuery('Escalated to urgent');
 });
-
 bot.action(/^priority:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
-  const ticketId = parseInt(ctx.match[1]);
   await ctx.answerCbQuery();
-  await ctx.reply(`Select new priority for ticket:`, { ...priorityKeyboard(ticketId) });
+  await ctx.reply(`Select new priority for ticket:`, { ...priorityKeyboard(parseInt(ctx.match[1])) });
 });
-
 bot.action(/^setpri:(\d+):(\w+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
@@ -965,13 +895,11 @@ bot.action(/^setpri:(\d+):(\w+)$/, async (ctx) => {
   await refreshCard(ticketId);
   await ctx.answerCbQuery(`Priority → ${pri}`);
 });
-
 bot.action(/^audit:(\d+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const ticketId = parseInt(ctx.match[1]);
   const r = await pool.query(
-    `SELECT * FROM ticket_events WHERE ticket_id=$1 ORDER BY timestamp DESC LIMIT 15`,
-    [ticketId]
+    `SELECT * FROM ticket_events WHERE ticket_id=$1 ORDER BY timestamp DESC LIMIT 15`, [ticketId]
   );
   await ctx.answerCbQuery();
   if (r.rows.length === 0) return ctx.reply('No events for this ticket.');
@@ -981,28 +909,20 @@ bot.action(/^audit:(\d+)$/, async (ctx) => {
   }
   await ctx.reply(txt, { parse_mode: 'Markdown' });
 });
-
 bot.action(/^cancel_pri:(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery('Cancelled');
   try { await ctx.deleteMessage(); } catch (_) {}
 });
 
 // ================= BROADCAST =================
-const BS = {
-  CONTENT: 'awaiting_content',
-  BUTTONS: 'awaiting_buttons',
-  AUDIENCE: 'awaiting_audience',
-  IDS: 'awaiting_ids'
-};
-
+const BS = { CONTENT: 'awaiting_content', BUTTONS: 'awaiting_buttons', AUDIENCE: 'awaiting_audience', IDS: 'awaiting_ids' };
 async function getBroadcastSession(adminId) {
   const r = await pool.query('SELECT * FROM broadcast_sessions WHERE admin_id=$1', [adminId]);
   return r.rows[0];
 }
 async function setBroadcastSession(adminId, stage, payload) {
   await pool.query(
-    `INSERT INTO broadcast_sessions (admin_id, stage, payload, updated_at)
-     VALUES ($1,$2,$3,NOW())
+    `INSERT INTO broadcast_sessions (admin_id, stage, payload, updated_at) VALUES ($1,$2,$3,NOW())
      ON CONFLICT (admin_id) DO UPDATE SET stage=EXCLUDED.stage, payload=EXCLUDED.payload, updated_at=NOW()`,
     [adminId, stage, payload || {}]
   );
@@ -1010,7 +930,6 @@ async function setBroadcastSession(adminId, stage, payload) {
 async function clearBroadcastSession(adminId) {
   await pool.query('DELETE FROM broadcast_sessions WHERE admin_id=$1', [adminId]);
 }
-
 async function askAudience(ctx) {
   await ctx.reply('📢 Who should receive this broadcast?', {
     reply_markup: { inline_keyboard: [
@@ -1021,32 +940,22 @@ async function askAudience(ctx) {
     ]}
   });
 }
-
 bot.command('broadcast', async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.reply('Not authorized');
   await setBroadcastSession(ctx.from.id, BS.CONTENT, {});
   await ctx.reply(
-    `📢 *Broadcast started*\n\n` +
-    `Send me:\n` +
-    `• Text, OR\n` +
-    `• Photo / video / GIF / document (caption becomes the message)\n\n` +
-    `For multiple photos, send them as an album, then send /skip when done.\n\n` +
-    `/cancel to abort.`,
+    `📢 *Broadcast started*\n\nSend me:\n• Text, OR\n• Photo / video / GIF / document\n\nFor multiple photos, send an album, then /skip.\n\n/cancel to abort.`,
     { parse_mode: 'Markdown', reply_markup: { force_reply: true } }
   );
 });
-
 bot.command('skip', async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return;
   const s = await getBroadcastSession(ctx.from.id);
   if (!s) return ctx.reply('No active broadcast.');
   if (s.stage === BS.CONTENT) {
-    // ★ Finish album/content stage, advance to buttons
     await setBroadcastSession(ctx.from.id, BS.BUTTONS, s.payload);
     await ctx.reply(
-      `Content saved. Add inline buttons?\n\n` +
-      `Format — one button per line:\n\`Label | https://url\`\n\n` +
-      `Or send /skip to continue without buttons.`,
+      `Content saved. Add inline buttons?\n\nFormat — one button per line:\n\`Label | https://url\`\n\nOr send /skip.`,
       { parse_mode: 'Markdown' }
     );
   } else if (s.stage === BS.BUTTONS) {
@@ -1054,22 +963,18 @@ bot.command('skip', async (ctx) => {
     await askAudience(ctx);
   }
 });
-
 bot.action(/^bc_target:(.+)$/, async (ctx) => {
   if (!(await isAdmin(ctx.from.id))) return ctx.answerCbQuery('Not authorized');
   const target = ctx.match[1];
   const s = await getBroadcastSession(ctx.from.id);
   if (!s) return ctx.answerCbQuery('No active broadcast');
-
   const payload = { ...s.payload, target };
-
   if (target === 'specific_users' || target === 'specific_groups') {
     await setBroadcastSession(ctx.from.id, BS.IDS, payload);
     await ctx.answerCbQuery();
     await ctx.editMessageText(`Send the IDs for ${target.replace('_', ' ')} (comma-separated):`);
     return;
   }
-
   const { startBroadcast } = require('./broadcast');
   const job = await startBroadcast(ctx.from.id, payload, bot);
   await clearBroadcastSession(ctx.from.id);
@@ -1081,10 +986,7 @@ bot.action(/^bc_target:(.+)$/, async (ctx) => {
 bot.on('message', async (ctx, next) => {
   const chatType = ctx.chat.type;
   const u = ctx.from;
-
   if (chatType === 'private') await upsertUser(u);
-
-  // Track groups
   if (['group', 'supergroup', 'channel'].includes(chatType)) {
     await pool.query(
       `INSERT INTO groups (telegram_id, title, type, active) VALUES ($1,$2,$3,true)
@@ -1092,51 +994,34 @@ bot.on('message', async (ctx, next) => {
       [ctx.chat.id, ctx.chat.title, chatType]
     );
   }
-
   const userIsAdmin = await isAdmin(u.id);
-
-  // Auto-register admins writing in the admin group
   if (['group', 'supergroup'].includes(chatType) && u && !u.is_bot) {
     const gid = await getSetting('admin_group_id');
     if (String(ctx.chat.id) === String(gid)) {
       await upsertAdminFromTelegram(u, 'agent');
     }
   }
-
-  // 1) Admin broadcast session
   if (userIsAdmin) {
     const bs = await getBroadcastSession(u.id);
     if (bs) { await handleBroadcastMessage(ctx, bs); return; }
   }
-
-  // 2) Admin pending reply / note
   if (userIsAdmin) {
     const pr = await pool.query('SELECT * FROM pending_replies WHERE admin_id=$1', [u.id]);
     if (pr.rows.length > 0) { await handleAdminReply(ctx, pr.rows[0]); return; }
-
     const pn = await pool.query('SELECT * FROM pending_notes WHERE admin_id=$1', [u.id]);
     if (pn.rows.length > 0) { await handleAdminNote(ctx, pn.rows[0]); return; }
   }
-
-  // 3) PRIVATE CHAT USER FLOW
-  //    ★ FIX: state check runs BEFORE admin check, so admins testing
-  //      the ticket-creation flow are not silently dropped.
   if (chatType === 'private') {
     const state = await getUserState(u.id);
     if (state && state.state === 'awaiting_description') {
       await createTicketFromDescription(ctx, state.payload.category || 'other');
       return;
     }
-
     const open = await pool.query(
       `SELECT * FROM tickets WHERE user_id=$1 AND status IN ('open','in_progress','pending')
-       ORDER BY created_at DESC LIMIT 1`,
-      [u.id]
+       ORDER BY created_at DESC LIMIT 1`, [u.id]
     );
-
-    // Admin with no pending state and no open ticket → ignore (they're acting as admin)
     if (userIsAdmin && open.rows.length === 0) return next();
-
     if (open.rows.length > 0) {
       const text = ctx.message.text || ctx.message.caption || '[attachment]';
       await addUserMessageToTicket(ctx, open.rows[0], text);
@@ -1144,7 +1029,6 @@ bot.on('message', async (ctx, next) => {
       await ctx.reply(formatTemplate(t(lang, 'msg_added'), { number: open.rows[0].ticket_number }));
       return;
     }
-
     const lang = (await getUserLanguage(u.id)) || 'en';
     if (!lang) {
       await ctx.reply(t('en', 'choose_lang'), { ...languageKeyboard(null) });
@@ -1153,8 +1037,6 @@ bot.on('message', async (ctx, next) => {
     await ctx.reply(t(lang, 'no_open_ticket'), { ...guideKeyboard(lang) });
     return;
   }
-
-  // 4) Group: warn about plain replies to ticket cards
   if (['group', 'supergroup'].includes(chatType) && userIsAdmin && ctx.message.reply_to_message) {
     const mapped = await pool.query(
       'SELECT ticket_id FROM message_mappings WHERE chat_id=$1 AND message_id=$2',
@@ -1168,7 +1050,6 @@ bot.on('message', async (ctx, next) => {
       return;
     }
   }
-
   return next();
 });
 
@@ -1189,16 +1070,13 @@ async function createTicketFromDescription(ctx, category) {
     [tk.id, u.id, u.first_name, text, ctx.message.message_id, u.id]
   );
   await clearUserState(u.id);
-
-  // ★ Post to group (with fallback)
   await postTicketToGroup(tk);
-
   await ctx.reply(
-    formatTemplate(t(lang, 'ticket_created'), { number: tk.ticket_number }),
-    { parse_mode: 'Markdown' }
+    formatTemplate(t(lang, 'ticket_created'), { number: tk.ticket_number }), { parse_mode: 'Markdown' }
   );
 }
 
+// ★ Robust group notification — handles missing card by retrying postTicketToGroup
 async function addUserMessageToTicket(ctx, ticket, text) {
   const u = ctx.from;
   await pool.query(
@@ -1206,23 +1084,30 @@ async function addUserMessageToTicket(ctx, ticket, text) {
      VALUES ($1,'user',$2,$3,$4,$5,$6)`,
     [ticket.id, u.id, u.first_name, text, ctx.message?.message_id, u.id]
   );
-  if (ticket.group_chat_id && ticket.card_message_id) {
-    const notice = `💬 *New message on #${ticket.ticket_number}* from ${escapeMd(u.first_name)}:\n\n${escapeMd(text)}`;
-    const noticePlain = `💬 New message on #${ticket.ticket_number} from ${u.first_name}:\n\n${text}`;
+
+  // ★ If ticket has no card in group, retry posting it first
+  if (!ticket.card_message_id) {
+    const refreshed = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticket.id])).rows[0];
+    if (refreshed && !refreshed.card_message_id) {
+      await postTicketToGroup(refreshed);
+      ticket = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticket.id])).rows[0];
+    }
+  }
+
+  // ★ Notify group — use card as reply target when available, standalone otherwise
+  const groupId = await getSetting('admin_group_id');
+  if (!groupId) return;
+  const mdNotice = `💬 *New message on #${ticket.ticket_number}* from ${escapeMd(u.first_name)}:\n\n${escapeMd(text)}`;
+  const plainNotice = `💬 New message on #${ticket.ticket_number} from ${u.first_name}:\n\n${text}`;
+  const opts = ticket.card_message_id ? { reply_to_message_id: ticket.card_message_id } : {};
+  try {
+    await bot.telegram.sendMessage(groupId, mdNotice, { parse_mode: 'Markdown', ...opts });
+  } catch (e) {
+    console.error(`notify group md failed for #${ticket.ticket_number}: ${e.message}`);
     try {
-      await bot.telegram.sendMessage(ticket.group_chat_id, notice, {
-        parse_mode: 'Markdown',
-        reply_to_message_id: ticket.card_message_id
-      });
-    } catch (e) {
-      console.error(`notify group failed (markdown): ${e.message}`);
-      try {
-        await bot.telegram.sendMessage(ticket.group_chat_id, noticePlain, {
-          reply_to_message_id: ticket.card_message_id
-        });
-      } catch (e2) {
-        console.error(`notify group failed (plain): ${e2.message}`);
-      }
+      await bot.telegram.sendMessage(groupId, plainNotice, opts);
+    } catch (e2) {
+      console.error(`notify group plain failed for #${ticket.ticket_number}: ${e2.message}`);
     }
   }
 }
@@ -1240,7 +1125,6 @@ async function handleAdminReply(ctx, pending) {
     await ctx.reply(`❌ Failed: ${escapeMd(e.message)}`, { parse_mode: 'Markdown' });
   }
 }
-
 async function handleAdminNote(ctx, pending) {
   const text = ctx.message.text;
   if (!text || text.startsWith('/')) return;
@@ -1253,7 +1137,6 @@ async function handleAdminNote(ctx, pending) {
 async function handleBroadcastMessage(ctx, session) {
   const u = ctx.from;
   const msg = ctx.message;
-
   if (session.stage === BS.CONTENT) {
     const payload = { ...session.payload };
     if (msg.media_group_id) {
@@ -1270,17 +1153,13 @@ async function handleBroadcastMessage(ctx, session) {
     else if (msg.animation) { payload.media = msg.animation.file_id; payload.text = msg.caption || ''; }
     else if (msg.document) { payload.media = msg.document.file_id; payload.text = msg.caption || ''; }
     else return ctx.reply('Send text, photo, video, GIF or document.');
-
     await setBroadcastSession(u.id, BS.BUTTONS, payload);
     await ctx.reply(
-      `Content saved. Add inline buttons?\n\n` +
-      `Format — one button per line:\n\`Label | https://url\`\n\n` +
-      `Or send /skip to continue without buttons.`,
+      `Content saved. Add inline buttons?\n\nFormat — one button per line:\n\`Label | https://url\`\n\nOr send /skip.`,
       { parse_mode: 'Markdown' }
     );
     return;
   }
-
   if (session.stage === BS.BUTTONS) {
     if (!msg.text) return ctx.reply('Send buttons as text, or /skip.');
     const buttons = msg.text.split('\n').map(line => {
@@ -1292,7 +1171,6 @@ async function handleBroadcastMessage(ctx, session) {
     await askAudience(ctx);
     return;
   }
-
   if (session.stage === BS.IDS) {
     if (!msg.text) return;
     const payload = { ...session.payload, ids: msg.text.trim() };
@@ -1308,13 +1186,10 @@ async function handleBroadcastMessage(ctx, session) {
 bot.on('chat_member', async (ctx) => {
   const gid = await getSetting('admin_group_id');
   if (String(ctx.chat.id) !== String(gid)) return;
-
   const m = ctx.chatMember;
   if (m.new_chat_member.user.is_bot) return;
-
   const status = m.new_chat_member.status;
   const user = m.new_chat_member.user;
-
   if (['member', 'administrator', 'creator'].includes(status)) {
     const role = status === 'creator' ? 'super_admin' : 'agent';
     await upsertAdminFromTelegram(user, role);
@@ -1322,7 +1197,6 @@ bot.on('chat_member', async (ctx) => {
     await deactivateAdmin(user.id);
   }
 });
-
 bot.on('my_chat_member', async (ctx) => {
   const chat = ctx.chat;
   const status = ctx.myChatMember.new_chat_member.status;
