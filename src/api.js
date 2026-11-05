@@ -79,50 +79,44 @@ router.get('/stats/admins', async (req, res) => {
 });
 
 // =============== tickets ===============
+// Inside GET /tickets — replace the query with:
 router.get('/tickets', async (req, res) => {
   try {
     const { status, q, limit } = req.query;
-    const conds = [];
-    const vals = [];
-    let i = 1;
-    if (status && status !== 'all') { conds.push(`status=$${i++}`); vals.push(status); }
+    const conds = []; const vals = []; let i = 1;
+    if (status && status !== 'all') { conds.push(`t.status=$${i++}`); vals.push(status); }
     if (q) {
-      conds.push(`(
-        CAST(ticket_number AS TEXT) ILIKE $${i} OR
-        user_name ILIKE $${i} OR
-        transaction_id ILIKE $${i} OR
-        wallet_address ILIKE $${i} OR
-        subject ILIKE $${i}
-      )`);
-      vals.push(`%${q}%`);
-      i++;
+      conds.push(`(CAST(t.ticket_number AS TEXT) ILIKE $${i} OR t.user_name ILIKE $${i} OR t.transaction_id ILIKE $${i} OR t.wallet_address ILIKE $${i} OR t.subject ILIKE $${i})`);
+      vals.push(`%${q}%`); i++;
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const lim = Math.min(parseInt(limit) || 100, 500);
     const r = await pool.query(
-      `SELECT * FROM tickets ${where} ORDER BY created_at DESC LIMIT $${i}`,
+      `SELECT t.*, u.language AS user_language
+       FROM tickets t LEFT JOIN users u ON u.telegram_id = t.user_id
+       ${where} ORDER BY t.created_at DESC LIMIT $${i}`,
       [...vals, lim]
     );
     res.json({ tickets: r.rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Inside GET /tickets/:id — replace the query with:
 router.get('/tickets/:id', async (req, res) => {
   try {
-    const t = await pool.query('SELECT * FROM tickets WHERE id=$1', [req.params.id]);
+    const t = await pool.query(
+      `SELECT t.*, u.language AS user_language
+       FROM tickets t LEFT JOIN users u ON u.telegram_id = t.user_id
+       WHERE t.id=$1`, [req.params.id]
+    );
     if (!t.rows[0]) return res.status(404).json({ error: 'Not found' });
     const msgs = await pool.query(
       'SELECT * FROM ticket_messages WHERE ticket_id=$1 ORDER BY created_at ASC',
       [req.params.id]
     );
     res.json({ ...t.rows[0], messages: msgs.rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
 // =============== actions ===============
 router.post('/tickets/:id/reply', async (req, res) => {
   try {
