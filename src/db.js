@@ -153,4 +153,20 @@ async function init() {
   for (const id of adminIds) {
     await pool.query(
       `INSERT INTO admins (telegram_id, role) VALUES ($1, 'super_admin')
-       ON CONFL
+       ON CONFLICT (telegram_id) DO NOTHING`,
+      [id]
+    );
+  }
+
+  if (process.env.ADMIN_GROUP_ID) {
+    await pool.query(
+      `INSERT INTO settings (key, value) VALUES ('admin_group_id', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [process.env.ADMIN_GROUP_ID]
+    );
+  }
+
+  console.log('Database schema ready');
+}
+
+module.exports = { pool, init };
