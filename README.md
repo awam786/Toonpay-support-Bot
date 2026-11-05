@@ -1,131 +1,141 @@
 # ToonPay Support Bot
 
-Support ticketing bot with admin group workflow, web dashboard and broadcast engine.
+Support ticketing bot with 20 languages, admin group workflow, web dashboard, and broadcast engine. **Users create tickets entirely through the bot** — no user-facing app.
 
-## Deploy on Railway (complete process)
+## New user flow (bot only)
 
-### 1. Get the bot token
-- Open **@BotFather** → `/newbot`
-- Save the **token**
-- Create a **supergroup** (enable Topics if you want per-ticket topics)
-- Add the bot to the group and promote it to **admin** (needs permission to pin, edit, send messages)
-- Get the **group chat ID** (starts with `-100`). If you don't know it, add `@userinfobot` or `@RawDataBot` to the group, or use the Telegram API once the bot is running.
-- Get your own **Telegram user ID** from `@userinfobot` (needed in `ADMIN_IDS`).
+1. User sends `/start`
+2. Bot asks for language (20 options, 2-column keyboard)
+3. User taps a language → bot saves preference and sends a full **guide message** with:
+   - How to create a ticket (button + `/newticket` command)
+   - How to check status (`/status <id>`, `/mytickets`)
+   - How to reply to a ticket
+   - How to change language (`/language`)
+4. User taps **Create Ticket Now** → category keyboard → describe issue → ticket is created and confirmed with a ticket number
+5. User can check status with `/status <ticket_id>`, list tickets with `/mytickets`, and reply by typing (auto-added to open ticket) or `/reply <id> <text>`
+
+**All bot messages are localized** to the user's selected language.
+
+## Supported languages (order of keyboard)
+
+1. 🇬🇧 English
+2. 🇪🇸 Español
+3. 🇩🇪 Deutsch
+4. 🇭🇺 Magyar
+5. 🇹🇷 Türkçe
+6. 🇷🇺 Русский
+7. 🇫🇷 Français
+8. 🇮🇹 Italiano
+9. 🇵🇹 Português
+10. 🇨🇳 中文
+11. 🇯🇵 日本語
+12. 🇰🇷 한국어
+13. 🇸🇦 العربية
+14. 🇮🇳 हिन्दी
+15. 🇧🇩 বাংলা
+16. 🇵🇰 اردو
+17. 🇮🇩 Indonesia
+18. 🇻🇳 Tiếng Việt
+19. 🇹🇭 ไทย
+20. 🇳🇱 Nederlands
+
+## User commands
+
+| Command | Description |
+|---|---|
+| `/start` | Welcome + language picker (first time) or guide |
+| `/newticket` | Start a new ticket (category → description) |
+| `/mytickets` | List your tickets |
+| `/status <id>` | Check a specific ticket's status |
+| `/reply <id> <text>` | Reply to a ticket |
+| `/language` | Change your language |
+| `/guide` | Show the guide again |
+| `/cancel` | Cancel any pending action |
+
+## Admin commands (English, in DM or admin group)
+
+| Command | Description |
+|---|---|
+| `/reply <ticket#> <text>` | Reply to a ticket (delivered to user) |
+| `/note <ticket#> <text>` | Internal note (user never sees it) |
+| `/ticket <ticket#>` | Show ticket card with action buttons |
+| `/stats` | Ticket counters |
+| `/broadcast` | Start interactive broadcast |
+| `/skip` | Skip inline buttons step during broadcast |
+| `/cancel` | Abort pending admin action |
+
+## Admin group behaviour
+
+- Plain messages in the group are **never** sent to users
+- Admins must use the **💬 Reply** button, `/reply <id> <text>`, or the dashboard's **Send Reply** button
+- Claiming is race-safe (atomic DB update)
+- Every action is recorded in `ticket_events` (append-only audit log)
+
+## Railway deployment (complete)
+
+### 1. Create the bot
+- `@BotFather` → `/newbot` → save token
+- Create a supergroup (enable Topics if desired), add the bot, promote it to **admin**
 
 ### 2. Create the Railway project
-1. Go to https://railway.app and create a new project
-2. Click **+ New** → **Database** → **PostgreSQL**
-3. Railway attaches a volume automatically — data survives redeploys
+- New project → **+ New** → **Database** → **PostgreSQL** (volume attached automatically)
 
-### 3. Push the repo to GitHub
+### 3. Push to GitHub
 ```bash
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/YOUR-USER/toonpay-support-bot.git
+git init && git add . && git commit -m "init"
+git remote add origin https://github.com/YOU/toonpay-support-bot.git
 git push -u origin main
 ```
 
-### 4. Create the bot service on Railway
-1. In the project → **+ New** → **GitHub Repo** → select your repo
-2. Railway auto-detects Node.js and uses `railway.json`
+### 4. Add the bot service
+- Railway project → **+ New** → **GitHub Repo** → select your repo
 
-### 5. Set environment variables
-In the bot service → **Variables**:
+### 5. Variables
 
 | Key | Value |
 |---|---|
-| `BOT_TOKEN` | from BotFather (mark as **sealed**) |
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference) |
-| `ADMIN_IDS` | `123456789,987654321` (your admin Telegram IDs) |
-| `ADMIN_GROUP_ID` | `-100…` (your admin supergroup) |
-| `WEBHOOK_SECRET` | long random string (sealed) |
+| `BOT_TOKEN` | from BotFather (**sealed**) |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+| `ADMIN_IDS` | `123456789,987654321` |
+| `ADMIN_GROUP_ID` | `-100…` |
+| `WEBHOOK_SECRET` | long random string (**sealed**) |
 | `PUBLIC_DOMAIN` | fill after step 6 |
 | `PORT` | `3000` |
 | `NODE_ENV` | `production` |
 
-### 6. Generate the public domain
-1. Service → **Settings** → **Networking** → **Generate Domain**
-2. Copy the host (e.g. `toonpay-bot.up.railway.app`)
-3. Set `PUBLIC_DOMAIN` to that host (no `https://`)
+### 6. Generate public domain
+Settings → Networking → **Generate Domain** → copy hostname → set `PUBLIC_DOMAIN` (no `https://`)
 
 ### 7. Redeploy
-Railway will restart the service, call `setWebhook`, and start receiving updates.
+The bot registers the webhook automatically on boot.
 
-### 8. Enable backups (advanced)
-In the **Postgres** service → **Backups** tab:
-- Enable **daily** schedule (retention 6 days)
-- Enable **weekly** schedule (retention 4 weeks)
-- Enable **PITR** (point-in-time recovery)
+### 8. Enable backups
+Postgres → Backups → daily + weekly + PITR. For maximum safety, schedule `pg_dump` to an external bucket.
 
-For maximum safety, run a scheduled `pg_dump` to an external bucket (R2/B2/S3) at least weekly.
+### 9. Test
 
-### 9. Test end-to-end
-1. DM the bot as a normal user → a ticket appears in the admin group and on the dashboard
-2. In the admin group, type a **plain message** → confirm it does NOT reach the user
-3. Click **💬 Reply** on the ticket card → send text → user receives it
-4. From the dashboard, open the ticket → **Send Reply** → user receives it
-5. Open the **Broadcast** view → send a test to yourself (Specific Users: your ID) with and without inline buttons
-
-## Adding admin auth to the dashboard (optional but recommended)
-
-The dashboard sends requests without an `x-admin-id` header by default. To enable per-admin attribution and audit, add this to the `api()` function in `public/dashboard.html`:
-
-```js
-async function api(path, opts = {}) {
-  const adminId = localStorage.getItem('toonpay_admin_id')
-    || prompt('Your Telegram ID:') || '0';
-  localStorage.setItem('toonpay_admin_id', adminId);
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', 'x-admin-id': adminId },
-    ...opts
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-}
-```
-
-## Bot commands (work in admin group or in DM as admin)
-
-| Command | Description |
-|---|---|
-| `/start` | Welcome / create ticket (users) |
-| `/reply <ticket#> <text>` | Reply to a ticket |
-| `/note <ticket#> <text>` | Save an internal note |
-| `/ticket <ticket#>` | Show ticket card |
-| `/stats` | Show ticket counters |
-| `/broadcast` | Start interactive broadcast flow |
-| `/skip` | Skip inline buttons step during broadcast |
-| `/cancel` | Abort any active reply/broadcast |
-
-## Broadcast flow via bot
-
-1. Send `/broadcast`
-2. Send text OR photo/video/GIF/document (caption = text)
-3. Send inline buttons as lines: `Label | https://url` or send `/skip`
-4. Choose audience: All Users / Specific Users / All Groups / Specific Groups
-5. If specific → send comma-separated IDs
-
-The engine handles:
-- Multiple photos → `sendMediaGroup` + follow-up message with buttons
-- Video / GIF → `sendVideo` / `sendAnimation` with inline keyboard
-- Rate limiting (~20/sec) with progress tracking in `broadcast_jobs`
-- Automatic `blocked=true` marking for users who blocked the bot (error 403)
-
-## Data persistence
-
-- **Database**: PostgreSQL on a Railway volume — survives restart/redeploy
-- **Uploaded files**: forwarded through Telegram, referenced by `file_id` — nothing stored on disk
-- **Audit log**: append-only `ticket_events` table records every action
-- **Backups**: volume snapshots + PITR + offsite `pg_dump`
+1. Send `/start` as a new user → language keyboard appears
+2. Pick **Deutsch** → guide appears in German with **Ticket erstellen** button
+3. Tap the button → category keyboard → pick **Zahlung** → describe issue → ticket number returned in German
+4. Send `/status <number>` → status returned in German
+5. Send `/language` → pick **Français** → guide appears in French
+6. In the admin group: type a plain message → confirm it does **not** reach the user
+7. Press **💬 Reply** → send text → user receives it in their language header
+8. Open the dashboard → tickets show language flag next to user
+9. Broadcast test: `/broadcast` → text → `/skip` → **Specific Users** → your ID → message arrives with buttons
 
 ## File map
 
 ```
-public/dashboard.html   Admin UI (single file, no build)
-src/server.js           Express + webhook entry point
-src/db.js               Postgres pool + schema + seeding
-src/bot.js              Telegraf handlers, ticket routing, interactive broadcast
-src/api.js              REST API consumed by the dashboard
-src/broadcast.js        Broadcast job engine (media groups, rate limit)
+public/dashboard.html   Admin dashboard (single-file UI)
+src/server.js           Express + webhook entry
+src/db.js               Postgres schema (adds users.language, user_states)
+src/i18n.js             20-language translations
+src/bot.js              Bot handlers: language → guide → /newticket flow
+src/api.js              REST API for the dashboard
+src/broadcast.js        Broadcast job engine
 ```
+
+## Adding a language
+
+Edit `src/i18n.js` — add a new entry to `LANGUAGES`, add the code to `LANGUAGE_ORDER`, and it appears in the keyboard automatically. The bot falls back to English for any missing key.
