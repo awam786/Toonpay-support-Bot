@@ -86,10 +86,13 @@ async function init() {
       username TEXT,
       first_name TEXT,
       last_name TEXT,
+      language TEXT,
       first_seen TIMESTAMP DEFAULT NOW(),
       last_seen TIMESTAMP DEFAULT NOW(),
       blocked BOOLEAN DEFAULT false
     );
+    -- migration: add language column if missing on old deployments
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT;
 
     CREATE TABLE IF NOT EXISTS groups (
       id SERIAL PRIMARY KEY,
@@ -110,6 +113,13 @@ async function init() {
       ticket_id INTEGER NOT NULL,
       chat_id BIGINT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS user_states (
+      user_id BIGINT PRIMARY KEY,
+      state TEXT NOT NULL,
+      payload JSONB DEFAULT '{}',
+      updated_at TIMESTAMP DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS broadcast_sessions (
@@ -143,20 +153,4 @@ async function init() {
   for (const id of adminIds) {
     await pool.query(
       `INSERT INTO admins (telegram_id, role) VALUES ($1, 'super_admin')
-       ON CONFLICT (telegram_id) DO NOTHING`,
-      [id]
-    );
-  }
-
-  if (process.env.ADMIN_GROUP_ID) {
-    await pool.query(
-      `INSERT INTO settings (key, value) VALUES ('admin_group_id', $1)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-      [process.env.ADMIN_GROUP_ID]
-    );
-  }
-
-  console.log('Database schema ready');
-}
-
-module.exports = { pool, init };
+       ON CONFL
