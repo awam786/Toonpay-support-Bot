@@ -244,24 +244,33 @@ async function refreshCard(ticketId) {
   } catch (_) {}
 }
 
-// ================ send to user (with reply hint footer) ================
+// ================ send to user (with reply hint + reply button) ================
 async function sendToUser(ticketId, text, senderId, senderName) {
   const tk = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticketId])).rows[0];
   if (!tk) throw new Error('Ticket not found');
 
-  // ★ Get user's language and build localized reply hint
   const lang = (await getUserLanguage(tk.user_id)) || 'en';
   const hint = formatTemplate(t(lang, 'reply_hint'), { number: tk.ticket_number });
+
+  // ★ Reply button for the user
+  const userKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💬 Reply to this ticket', `user_reply:${tk.id}`)]
+  ]);
 
   const bodyMd = `📩 *Ticket #${tk.ticket_number}*\n\n${escapeMd(text)}\n\n━━━━━━━━━━━━━━\n${hint}`;
   const bodyPlain = `📩 Ticket #${tk.ticket_number}\n\n${text}\n\n━━━━━━━━━━━━━━\n${hint}`;
 
   let sent;
   try {
-    sent = await bot.telegram.sendMessage(tk.user_id, bodyMd, { parse_mode: 'Markdown' });
+    sent = await bot.telegram.sendMessage(tk.user_id, bodyMd, {
+      parse_mode: 'Markdown',
+      ...userKeyboard
+    });
   } catch (e) {
     console.error(`sendToUser markdown failed for #${tk.ticket_number}: ${e.message}`);
-    sent = await bot.telegram.sendMessage(tk.user_id, bodyPlain);
+    sent = await bot.telegram.sendMessage(tk.user_id, bodyPlain, {
+      ...userKeyboard
+    });
   }
 
   await pool.query(
@@ -369,7 +378,13 @@ bot.command('status', async (ctx) => {
   await ctx.reply(escapeMd(body), { parse_mode: 'Markdown' });
 });
 
-// ================= ★★★ /reply — FIXED OWNERSHIP-AWARE LOGIC ★★★ =================
+// ★ User button action: prompt with ForceReply
+bot.action(/^user_reply:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply('✍️ Type your reply below:', { reply_markup: { force_reply: true } });
+});
+
+// ================= ★★★ /reply — OWNERSHIP-AWARE (BIGINT FIXED) ★★★ =================
 bot.command('reply', async (ctx) => {
   const parts = ctx.message.text.split(' ');
   const num = parseInt(parts[1]);
@@ -377,31 +392,29 @@ bot.command('reply', async (ctx) => {
   const lang = (await getUserLanguage(ctx.from.id)) || 'en';
   const senderIsAdmin = await isAdmin(ctx.from.id);
 
-  // Missing arguments
   if (!num || !text) {
     if (senderIsAdmin) return ctx.reply('Usage: /reply <ticket#> <message>');
     return ctx.reply(t(lang, 'reply_usage'));
   }
 
-  // Ticket must exist
   const tk = (await pool.query('SELECT * FROM tickets WHERE ticket_number=$1', [num])).rows[0];
   if (!tk) {
     if (senderIsAdmin) return ctx.reply('Ticket not found');
     return ctx.reply(t(lang, 'status_not_found'));
   }
 
-  // ★ CASE A: Sender owns the ticket → treat as USER reply (works for admins testing too)
-  if (tk.user_id === ctx.from.id) {
+  // ★ CASE A: Sender OWNS the ticket → user path (works for admins testing too)
+  //    FIX: Number() both sides because Postgres returns BIGINT as a string
+  if (Number(tk.user_id) === Number(ctx.from.id)) {
     await addUserMessageToTicket(ctx, tk, text);
     return ctx.reply(formatTemplate(t(lang, 'msg_added'), { number: num }));
   }
 
-  // ★ CASE B: Sender does NOT own the ticket → must be admin
+  // ★ CASE B: Sender does NOT own → must be admin
   if (!senderIsAdmin) {
     return ctx.reply(t(lang, 'status_not_found'));
   }
 
-  // Admin replying to someone else's ticket
   try {
     const name = await getAdminName(ctx.from.id);
     await sendToUser(tk.id, text, ctx.from.id, name);
@@ -419,7 +432,6 @@ async function handleHelpCommand(ctx) {
     const lang = (await getUserLanguage(ctx.from.id)) || 'en';
     return sendGuide(ctx, lang);
   }
-
   const helpText =
 `👨‍💼 *ToonPay Admin Help*
 
@@ -462,7 +474,6 @@ async function handleHelpCommand(ctx) {
 2. \`/claim <#>\` → take ownership
 3. 💬 Reply or \`/reply <#> text\` → answer user
 4. \`/resolve <#>\` → mark done`;
-
   await ctx.reply(helpText, { parse_mode: 'Markdown', disable_web_page_preview: true });
 }
 bot.command('help', handleHelpCommand);
@@ -1076,7 +1087,7 @@ async function createTicketFromDescription(ctx, category) {
   );
 }
 
-// ★ Robust group notification — handles missing card by retrying postTicketToGroup
+// ★ Robust group notification — includes card buttons on every notification
 async function addUserMessageToTicket(ctx, ticket, text) {
   const u = ctx.from;
   await pool.query(
@@ -1085,7 +1096,6 @@ async function addUserMessageToTicket(ctx, ticket, text) {
     [ticket.id, u.id, u.first_name, text, ctx.message?.message_id, u.id]
   );
 
-  // ★ If ticket has no card in group, retry posting it first
   if (!ticket.card_message_id) {
     const refreshed = (await pool.query('SELECT * FROM tickets WHERE id=$1', [ticket.id])).rows[0];
     if (refreshed && !refreshed.card_message_id) {
@@ -1094,18 +1104,27 @@ async function addUserMessageToTicket(ctx, ticket, text) {
     }
   }
 
-  // ★ Notify group — use card as reply target when available, standalone otherwise
   const groupId = await getSetting('admin_group_id');
   if (!groupId) return;
   const mdNotice = `💬 *New message on #${ticket.ticket_number}* from ${escapeMd(u.first_name)}:\n\n${escapeMd(text)}`;
   const plainNotice = `💬 New message on #${ticket.ticket_number} from ${u.first_name}:\n\n${text}`;
-  const opts = ticket.card_message_id ? { reply_to_message_id: ticket.card_message_id } : {};
+  
+  const mdOpts = {
+    parse_mode: 'Markdown',
+    ...(ticket.card_message_id ? { reply_to_message_id: ticket.card_message_id } : {}),
+    ...ticketCardKeyboard(ticket.id)
+  };
+  const plainOpts = {
+    ...(ticket.card_message_id ? { reply_to_message_id: ticket.card_message_id } : {}),
+    ...ticketCardKeyboard(ticket.id)
+  };
+
   try {
-    await bot.telegram.sendMessage(groupId, mdNotice, { parse_mode: 'Markdown', ...opts });
+    await bot.telegram.sendMessage(groupId, mdNotice, mdOpts);
   } catch (e) {
     console.error(`notify group md failed for #${ticket.ticket_number}: ${e.message}`);
     try {
-      await bot.telegram.sendMessage(groupId, plainNotice, opts);
+      await bot.telegram.sendMessage(groupId, plainNotice, plainOpts);
     } catch (e2) {
       console.error(`notify group plain failed for #${ticket.ticket_number}: ${e2.message}`);
     }
